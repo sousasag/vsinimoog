@@ -6,6 +6,7 @@ from ssl import get_server_certificate
 import time
 import os
 import numpy as np
+from PyAstronomy import pyasl
 from astropy.io import fits
 from scipy.interpolate import interp1d
 import pandas as pd
@@ -255,14 +256,76 @@ def creating_final_synth_spectra(vsini, star, spectrum, teff, feh, vtur, logg, s
     synth_normalized_spectra = pd.DataFrame(data=np.column_stack((obs_lambda, synth_data_fe, flux_diff, flux_ratio)),columns=['wl','flux', 'flux_diff', 'flux_ratio'])
     synth_normalized_spectra.to_csv('running_dir/%s_synth_normalized_spectra.rdb' % star, index = False, sep = '\t')
 
+def fit_lmfit_gauss(x, y):
+  """
+  This is my simple function to fit a Gaussian to data (x,y)
+  using lmfit package
+  """
+  from lmfit.models import GaussianModel, ConstantModel
 
-def get_spectra(fitsfile):
+  gmodel = GaussianModel(prefix='g_')
+  cmodel = ConstantModel(prefix='c_')
+  model = gmodel + cmodel
+
+  params = model.make_params()
+  params['g_center'].set(value=x[np.argmax(y)], min=x[0], max=x[-1])
+  params['g_sigma'].set(value=1.0, min=0.01, max=10.0)
+  params['g_amplitude'].set(value=np.max(y), min=0.01)
+  params['c_c'].set(value=np.min(y))
+
+  result = model.fit(y, params, x=x)
+  return result
+
+
+def get_mask_spectra(li=6050, lf=6730):
+    maskdata = fits.getdata('Data/ESPRESSO_G2.fits')
+    tw = np.linspace(li, lf, 20000)
+    ind = np.where( (maskdata['lambda'] > li) & (maskdata['lambda'] <  lf))
+    tf = np.ones(tw.shape)
+    for lr in maskdata['lambda'][ind]:
+      tf -= np.exp(-(tw-lr)**2/(2.*0.1**2))
+    return tw, tf
+
+def get_rv(waves, flux, li=6050, lf=6730):
+    tw, tf = get_mask_spectra(li=li, lf=lf)
+    ind_s = np.where( (waves > li) & (waves <  lf))
+    dw = waves[ind_s]
+    df = flux[ind_s] / np.max(flux[ind_s]) # with first order normalization
+    #plt.plot(dw, df)
+    #plt.plot(tw, tf)
+    #plt.show()
+    rv, cc = pyasl.crosscorrRV(dw, df, tw, tf, -100., 100., 0.05, skipedge=500)
+    maxind = np.argmax(cc)
+    result = fit_lmfit_gauss(rv, cc)
+    #print(result.fit_report())
+    #print(result.params['g_center'].value)
+    #plt.plot(rv, cc, 'bp-')
+    #plt.plot(rv, result.best_fit, 'r-')
+    #plt.axvline(x=rv[maxind], color='k', ls='--')
+    #plt.show()  
+  
+    return rv[maxind]
+
+def correct_rv(waves, rv):
+    """
+    This is my simple function to correct the radial velocity
+    """
+    c = 299792.458 # speed of light in km/s
+    waves_corr = waves * (1 + rv*(-1)/c)
+    return waves_corr
+
+
+def get_spectra(fitsfile, li=6050, lf=6730):
     img_data, img_header = fits.getdata(fitsfile, header=True)
     cdelta1 = img_header['CDELT1']
     crval1  = img_header['CRVAL1']
     npoints = img_header['NAXIS1']
     ll = np.arange(0,npoints)*cdelta1+crval1
-    return ll, img_data, cdelta1
+    rv = get_rv(ll, img_data, li=li, lf=lf)
+    ll_cor = correct_rv(ll, rv)
+    #plt.plot(ll_cor, img_data)
+    #plt.show()
+    return ll_cor, img_data, cdelta1
 
 def get_intervals_normalized_spectra(ll, flux, fe_intervals, snr):
     obs_data_norm = []
@@ -459,6 +522,9 @@ def manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe
     plt.show()
 
 
+def correct_obs_flux(obs_lambda, obs_flux, synth_lambda, synth_flux):
+
+    pass
 
 
 
@@ -490,242 +556,6 @@ def main():
     instr_broad = 0.042
     #spectrum = "/home/sousasag/Programas/Vsini/Vsini2_Vardan/myVsini/spectra/WASP-34_ESPRESSO.fits"
 
-    star = "TOI-908_HARPS"
-    teff = 5626
-    eteff = 61
-    logg = 4.38
-    feh  = 0.08
-    efeh = 0.041
-    vtur = 0.913
-    snr  = 270
-    ldc  = 0.61
-    instr_broad = 0.055
-    spectrum = "/home/sousasag/Data/NCORES/TOI-908/combined_spec/TOI-908_HARPSS_2021_rv.fits"
-
-
-    star = "TOI-969_HARPS"
-    teff = 4435
-    eteff = 80
-    logg = 4.16
-    feh  = 0.175
-    efeh = 0.044
-    vtur = 0.4
-    snr  = 220
-    ldc  = 0.787   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.055
-    spectrum = "/home/sousasag/Investigador/spectra/TOI-969/TOI969_HARPS_2021_rv.fits"
-
-
-    star = "TOI-469_ESPRESSO"
-    teff = 5289
-    eteff = 69
-    logg = 4.237
-    feh  = 0.239
-    efeh = 0.047
-    vtur = 0.735
-    snr  = 180
-    ldc  = 0.714   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Programas/Vsini/Vsini2_Vardan/vsini/spectra/TOI-469_SINGLEHR11_ESPRESSO_2022.fits"
-
-
-
-    star = "HD82943_HARPS"
-    teff = 6010
-    eteff = 60
-    logg = 4.42
-    feh  = 0.27
-    efeh = 0.05
-    vtur = 1.17
-    snr  = 500
-    ldc  = 0.601   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.055
-    spectrum = "/home/sousasag/Programas/GIT_projects/sweet-cat-spec/SPECTRA/spectra_s/HD82943_HARPS_2009_rv.fits"
-#    spectrum = "/home/sousasag/Downloads/WASP-132_HARPS.fits"
-
-
-    star = "TOI-512_ESPRESSO"
-    teff = 5277
-    eteff = 67
-    logg = 4.347
-    feh  = -0.11
-    efeh = 0.045
-    vtur = 0.674
-    snr  = 180
-    ldc  = 0.699   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Nextcloud/WORK/spectra/ESPRESSO_reduced/combined_spectra_all_Feb2022/TOI-512_SINGLEHR11_ESPRESSO_2022_rv.fits"
-
-
-    star = "TOI-4189_ESPRESSO"
-    teff = 5666
-    eteff = 61
-    logg = 4.44
-    feh  = -0.27
-    efeh = 0.041
-    vtur = 0.83
-    snr  = 700
-    ldc  = 0.60   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Data/TOI-4189_Espresso/TOI-4189_ESPRESSO_2023_rv.fits"
-
-
-    star = "TOI-815_ESPRESSO"
-    teff = 4869
-    eteff = 77
-    logg = 4.51
-    feh  = -0.09
-    efeh = 0.05
-    vtur = 0.47
-    snr  = 700
-    ldc  = 0.69   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Downloads/TOI-815_ESPRESSO_s1d_rv.fits"
-
-
-    star = "TOI-3261_ESPRESSO"
-    teff = 5065
-    eteff = 72
-    logg = 4.19
-    feh  = 0.135
-    efeh = 0.05
-    vtur = 0.57
-    snr  = 200
-    ldc  = 0.57   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Data/NCORES/NOMADS/TOI3261/ESPRESSO/TOI3261_ESPRESSO_2023.fits"
-    
-
-#    star = "TOI-3261_HARPS"
-#    teff = 5077
-#    eteff = 82
-#    logg = 4.28
-#    feh  = 0.146
-#    efeh = 0.055
-#    vtur = 0.61
-#    snr  = 200
-#    ldc  = 0.57   #https://exoctk.stsci.edu/limb_darkening
-#    instr_broad = 0.055
-#    spectrum = "/home/sousasag/Data/NCORES/NOMADS/combined_spec/TOI3261_HARPSS_2023_rv.fits"
-
-    star = "TOI-238_ESPRESSO"
-    teff = 5059
-    eteff = 889
-    logg = 4.51
-    feh  = -0.114
-    efeh = 0.05
-    vtur = 0.70
-    snr  = 200
-    ldc  = 0.57   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Nextcloud/WORK/spectra/ESPRESSO_reduced/combined_spectra_all_Feb2022/TOI-238_SINGLEHR11_ESPRESSO_2022.fits"
-
-    star = "TOI-214_ESPRESSO"
-    teff = 5350
-    eteff = 63
-    logg = 4.45
-    feh  = -0.34
-    efeh = 0.04
-    vtur = 0.67
-    snr  = 600
-    ldc  = 0.57   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Programas/GIT_projects/sweet-cat-spec/new_codes/combined_spec2/TOI-214_ESPRESSO_140000_377_789_2023.fits"
-
-
-    star = "HD44219_HARPSS"
-    teff = 5772
-    eteff = 16
-    logg = 4.21
-    feh  = 0.06
-    efeh = 0.01
-    vtur = 1.1
-    snr  = 500
-    ldc  = 0.60   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.055
-    spectrum = "/home/sousasag/Programas/GIT_projects/Others/PEEC-2023/spectra_vsin2_4/HD44219_HARPSS_115000_378_691_2020_rv.fits"
-#    spectrum = "/home/sousasag/Downloads/WASP-132_HARPS.fits"
-
-
-    star = "K2-157_ESPRESSO"
-    teff = 5334
-    eteff = 64
-    logg = 4.33
-    feh  = 0.024
-    efeh = 0.04
-    vtur = 0.734
-    snr  = 550
-    ldc  = 0.557    #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Data/ESPRESSO/K2-157/K2-157_ESPRESSO_2024.fits"
-
-
-    star = "TOI-421_ESPRESSO"
-    teff = 5279
-    eteff = 67
-    logg = 4.36
-    feh  = -0.04
-    efeh = 0.045
-    vtur = 0.63
-    snr  = 550
-    ldc  = 0.65    #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Data/ATREIDES/spectra_combined/TOI421_all.fits"
-    spectrum = "/home/sousasag/Data/ATREIDES/TOI-421_master/ANTARESS_master/TOI421_ESPRESSO_Master.fits"
-
-
-
-    star = "HAT-P-26_ESPRESSO"
-    teff = 5006
-    eteff = 86
-    logg = 4.237
-    feh  = -0.023
-    efeh = 0.054
-    vtur = 0.367
-    snr  = 550
-    ldc  = 0.65    #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.042
-    spectrum = "/home/sousasag/Data/ATREIDES/HAT-P-26_master/Data/ESPRESSO_binned_phase0.fits"
-
-
-
-
-
-    star = "TIC33743172_HARPSS"
-    teff = 5747
-    eteff = 63
-    logg = 4.17
-    feh  = 0.29
-    efeh = 0.043
-    vtur = 1.16
-    snr  = 300
-    ldc  = 0.60    #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.055
-    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC33743172_HARPSS_115000_378_691_2024.fits"
-
-    star = "TIC279475245_HARPSS"
-    teff = 6002
-    eteff = 69
-    logg = 4.596
-    feh  = -0.083
-    efeh = 0.048
-    vtur = 1.011
-    snr  = 300
-    ldc  = 0.486    #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.055
-    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC279475245_HARPSS_115000_378_691_2024.fits"
-
-    star = "TIC139147770_HARPSS"
-    teff = 5901
-    eteff = 63
-    logg = 4.439
-    feh  = -0.005
-    efeh = 0.043
-    vtur = 0.987
-    snr  = 300
-    ldc  = 0.486    #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.055
-    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC139147770_HARPSS_115000_378_691_2024.fits"
 
     star = "TIC61024636_ESPRESSO"
     teff = 5261
@@ -750,12 +580,12 @@ def main():
     snr  = 300
     ldc  = 0.6    #https://exoctk.stsci.edu/limb_darkening
     instr_broad = 0.055
-    spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded_rv.fits"
+    spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded.fits"
 
 
-    manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
-    print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
-    return
+    #manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
+    #print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
+    #return
 
 
     print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)

@@ -598,10 +598,10 @@ import scipy.linalg.blas
 class mpfit:
 
     (blas_enorm32,) = scipy.linalg.blas.get_blas_funcs(
-        ['nrm2'], numpy.array([0], dtype=float)
+        ['nrm2'], numpy.array([0], dtype=numpy.float32)
     )
     (blas_enorm64,) = scipy.linalg.blas.get_blas_funcs(
-        ['nrm2'], numpy.array([0], dtype=float)
+        ['nrm2'], numpy.array([0], dtype=numpy.float64)
     )
 
     def __init__(
@@ -919,7 +919,7 @@ class mpfit:
         # In the case if the xall is not float or if is float but has less
         # than 64 bits we do convert it into double
         if xall.dtype.kind != 'f' or xall.dtype.itemsize <= 4:
-            xall = xall.astype(float)
+            xall = xall.astype(numpy.float)
 
         npar = len(xall)
         self.fnorm = -1.0
@@ -2429,9 +2429,9 @@ class mpfit:
 class machar:
     def __init__(self, double=1):
         if double == 0:
-            info = numpy.finfo(float)
+            info = numpy.finfo(numpy.float32)
         else:
-            info = numpy.finfo(float)
+            info = numpy.finfo(numpy.float64)
 
         self.machep = info.eps
         self.maxnum = info.max

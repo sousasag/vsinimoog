@@ -1,0 +1,11 @@
+print ('results', star, teff, logg, feh, snr, spectrum, vrot, vrot_err, vmac, status, vsini_final_err)
+results TOI-238_ESPRESSO 5059 4.51 -0.114 200 /home/sousasag/Nextcloud/WORK/spectra/ESPRESSO_reduced/combined_spectra_all_Feb2022/TOI-238_SINGLEHR11_ESPRESSO_2022.fits 1.839 0.034 2.428 1 0.46225209572266934
+results TOI-214_ESPRESSO 5350 4.45 -0.34 600 /home/sousasag/Programas/GIT_projects/sweet-cat-spec/new_codes/combined_spec2/TOI-214_ESPRESSO_140000_377_789_2023.fits 1.628 0.051 2.56 1 1.6761774965677112
+results TOI-421_ESPRESSO 5279 4.36 -0.04 550 /home/sousasag/Data/ATREIDES/spectra_combined/TOI421_all.fits 1.631 0.044 2.706 1 2.290105892748193
+results TOI-421_ESPRESSO 5279 4.36 -0.04 550 /home/sousasag/Data/ATREIDES/spectra_combined/TOI421_all.fits 2.872 0.015 0 1 0.2334823333787806
+results TOI-421_ESPRESSO 5279 4.36 -0.04 550 /home/sousasag/Data/ATREIDES/spectra_combined/TOI421_all.fits 2.872 0.015 0.05 1 0.2334823333787806
+results HAT-P-26_ESPRESSO 5006 4.237 -0.023 550 /home/sousasag/Data/ATREIDES/HAT-P-26_master/Data/ESPRESSO_binned_phase0.fits 0.1 0.0 3.008 4 1.7596320638133416
+results HAT-P-26_ESPRESSO 5006 4.237 -0.023 550 /home/sousasag/Data/ATREIDES/HAT-P-26_master/Data/ESPRESSO_binned_phase0.fits 1.938 0.031 2.0 1 0.4880686427132969
+results HAT-P-26_ESPRESSO 5006 4.237 -0.023 550 /home/sousasag/Data/ATREIDES/HAT-P-26_master/Data/ESPRESSO_binned_phase0.fits 2.826 0.0 0.0 2 0.506186724440695
+results HAT-P-26_ESPRESSO 5006 4.237 -0.023 550 /home/sousasag/Data/ATREIDES/HAT-P-26_master/Data/ESPRESSO_binned_phase0.fits 2.637 0.015 0.0 1 0.2618281879401068
+

@@ -1,0 +1,1 @@
+results HD82943_HARPS 6010 4.42 0.27 500 /home/sousasag/Programas/GIT_projects/sweet-cat-spec/SPECTRA/spectra_s/HD82943_HARPS_2009_rv.fits 1.542 0.0 3.901 1 1.4761060260021976
