@@ -14,6 +14,8 @@ import sys
 sys.path.insert(0, os.path.dirname(repr(__file__).replace("'",""))+'mpfit/')
 from mpfit.mpfit import mpfit
 from matplotlib import pyplot as plt
+from scipy.differentiate import derivative
+
 
 RUN_PATH      = 'running_dir/'
 #MOOG_PATH    = ""  # if you have MOOGSILENT in your path use this.
@@ -72,7 +74,8 @@ def moog_fe(star, p, vmac, lambda_i, lambda_f, ldc, CDELT1, instr_broad):
         par.write('summary_out    \'out1\' \n')
         par.write('smoothed_out   \'synth_fe.asc\' \n')
         par.write('standard_out   \'out2\' \n')
-        par.write('lines_in       \'../linelist/iron_vrot_moog.list\' \n')
+#        par.write('lines_in       \'../linelist/iron_vrot_moog.list\' \n')
+        par.write('lines_in       \'../linelist/iron_vrot_moog_2.list\' \n')
         par.write('abundances     1    1\n')
         par.write('        26     0.00 \n')
         par.write('plot           1 \n')
@@ -522,6 +525,23 @@ def manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe
     plt.show()
 
 
+
+def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test):
+    obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
+    fig = plt.figure(figsize=(10,6))
+    ax1 = fig.add_subplot(211)
+    ax2 = fig.add_subplot(212, sharex = ax1)
+    ax1.plot(obs_lambda, obs_flux, label='Observed')
+    ax1.plot(obs_lambda, synth_data_fe, label='Synthetic')
+    dobs_flux = np.gradient(obs_flux, obs_lambda)
+    dsyn_flux = np.gradient(synth_data_fe, obs_lambda)
+    ax2.plot(obs_lambda, dobs_flux, label='Observed')
+    ax2.plot(obs_lambda, dsyn_flux, label='Synthetic')
+    ax1.legend()
+    ax2.legend()
+    plt.show()
+
+
 def correct_obs_flux(obs_lambda, obs_flux, synth_lambda, synth_flux):
 
     pass
@@ -583,9 +603,9 @@ def main():
     spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded.fits"
 
 
-    #manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
-    #print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
-    #return
+    manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
+    print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
+    return
 
 
     print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
