@@ -528,6 +528,46 @@ def manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe
 
 def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test):
     obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
+#    plot_line_profile(5522.450, obs_lambda, obs_flux, synth_data_fe, space = 4)
+#    plot_line_profile(5560.220, obs_lambda, obs_flux, synth_data_fe, space = 4)
+    plot_line_profile(5633.950, obs_lambda, obs_flux, synth_data_fe, space = 4)
+
+
+def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test):
+    lines = np.loadtxt('linelist/linesfitted.ares', usecols= (0,), unpack=True)
+    obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
+    plot_line_profile(lines[20], obs_lambda, obs_flux, synth_data_fe, space = 4)
+
+
+
+
+
+from scipy import interpolate
+from scipy.optimize import root
+def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4):
+    ind = np.where( (obs_lambda >= line - space) & (obs_lambda <=  line + space))
+
+    obs_lambda = obs_lambda[ind]
+    obs_flux = obs_flux[ind]
+    synth_data_fe = synth_data_fe[ind]
+    ind_c = np.where(obs_lambda >= line)[0][0]
+    ind_l = np.arange(10)+ind_c-5
+
+    dobs_flux = np.gradient(obs_flux, obs_lambda)
+    dsyn_flux = np.gradient(synth_data_fe, obs_lambda)
+    pobs = interpolate.interp1d(obs_lambda[ind_l], dobs_flux[ind_l])
+    psyn = interpolate.interp1d(obs_lambda[ind_l], dsyn_flux[ind_l])
+    obs_zero = root(pobs, x0=line).x
+    syn_zero = root(psyn, x0=line).x
+    rv_corr = (obs_zero - syn_zero)/syn_zero * 299792.458
+    print(obs_zero, syn_zero, rv_corr)
+
+    obs_lambda_c = correct_rv(obs_lambda, rv_corr)
+    flux_int = interpolate.interp1d(obs_lambda_c, obs_flux, fill_value='extrapolate', bounds_error=False)
+    obs_flux = flux_int(obs_lambda)
+
+    ind_c = np.where(obs_lambda >= line)[0][0]
+    ind_l = np.arange(10)+ind_c-5
     fig = plt.figure(figsize=(10,6))
     ax1 = fig.add_subplot(211)
     ax2 = fig.add_subplot(212, sharex = ax1)
@@ -535,8 +575,23 @@ def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, f
     ax1.plot(obs_lambda, synth_data_fe, label='Synthetic')
     dobs_flux = np.gradient(obs_flux, obs_lambda)
     dsyn_flux = np.gradient(synth_data_fe, obs_lambda)
-    ax2.plot(obs_lambda, dobs_flux, label='Observed')
-    ax2.plot(obs_lambda, dsyn_flux, label='Synthetic')
+
+    pobs = interpolate.interp1d(obs_lambda[ind_l], dobs_flux[ind_l])
+    psyn = interpolate.interp1d(obs_lambda[ind_l], dsyn_flux[ind_l])
+    obs_zero = root(pobs, x0=line).x
+    syn_zero = root(psyn, x0=line).x
+    rv_corr = (obs_zero - syn_zero)/syn_zero * 299792.458
+    print(obs_zero, syn_zero, rv_corr)
+
+    ax2.plot(obs_lambda, dobs_flux, label='Observed', linestyle='--')
+    ax2.plot(obs_lambda[ind_l], dobs_flux[ind_l], marker='o', c='k', ls='None')
+    ax2.plot(obs_lambda, dsyn_flux, label='Synthetic', linestyle='--', marker='o')
+    ax2.plot(obs_lambda[ind_l], dsyn_flux[ind_l], marker='o', c='k', ls='None')
+    ax2.plot(obs_lambda[ind_l], pobs(obs_lambda[ind_l]), label='Observed', linestyle='--', color='k')
+    ax2.plot(obs_lambda[ind_l], psyn(obs_lambda[ind_l]), label='Synthetic', linestyle='--', color='k')
+    ax2.axhline(y=0, color='k', ls='--')
+    ax2.axvline(x=obs_zero, color='b', ls='--', label='Obs zero')
+    ax2.axvline(x=syn_zero, color='r', ls='--', label='Syn zero')
     ax1.legend()
     ax2.legend()
     plt.show()
@@ -603,7 +658,8 @@ def main():
     spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded.fits"
 
 
-    manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
+#    manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,4)
+    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,1)
     print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
     return
 
