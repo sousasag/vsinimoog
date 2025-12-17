@@ -535,16 +535,23 @@ def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, f
 
 def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test):
     lines = np.loadtxt('linelist/linesfitted.ares', usecols= (0,), unpack=True)
-    obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
-    plot_line_profile(lines[20], obs_lambda, obs_flux, synth_data_fe, space = 4)
+    vrot_vec = np.arange(0,10,0.25)
+    eval1_vec = []
+    eval2_vec = []
+    for vrot_test in vrot_vec:
+        obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
+        eval1 , eval2 = plot_line_profile(lines[30], obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=False)
+        eval1_vec.append(eval1)
+        eval2_vec.append(eval2)
 
-
-
+    plt.plot(vrot_vec, eval1_vec, label='Flux')
+    plt.plot(vrot_vec, eval2_vec, label='Derivative')
+    plt.show()
 
 
 from scipy import interpolate
 from scipy.optimize import root
-def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4):
+def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=True):
     ind = np.where( (obs_lambda >= line - space) & (obs_lambda <=  line + space))
 
     obs_lambda = obs_lambda[ind]
@@ -568,11 +575,6 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4):
 
     ind_c = np.where(obs_lambda >= line)[0][0]
     ind_l = np.arange(10)+ind_c-5
-    fig = plt.figure(figsize=(10,6))
-    ax1 = fig.add_subplot(211)
-    ax2 = fig.add_subplot(212, sharex = ax1)
-    ax1.plot(obs_lambda, obs_flux, label='Observed')
-    ax1.plot(obs_lambda, synth_data_fe, label='Synthetic')
     dobs_flux = np.gradient(obs_flux, obs_lambda)
     dsyn_flux = np.gradient(synth_data_fe, obs_lambda)
 
@@ -583,19 +585,29 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4):
     rv_corr = (obs_zero - syn_zero)/syn_zero * 299792.458
     print(obs_zero, syn_zero, rv_corr)
 
-    ax2.plot(obs_lambda, dobs_flux, label='Observed', linestyle='--')
-    ax2.plot(obs_lambda[ind_l], dobs_flux[ind_l], marker='o', c='k', ls='None')
-    ax2.plot(obs_lambda, dsyn_flux, label='Synthetic', linestyle='--', marker='o')
-    ax2.plot(obs_lambda[ind_l], dsyn_flux[ind_l], marker='o', c='k', ls='None')
-    ax2.plot(obs_lambda[ind_l], pobs(obs_lambda[ind_l]), label='Observed', linestyle='--', color='k')
-    ax2.plot(obs_lambda[ind_l], psyn(obs_lambda[ind_l]), label='Synthetic', linestyle='--', color='k')
-    ax2.axhline(y=0, color='k', ls='--')
-    ax2.axvline(x=obs_zero, color='b', ls='--', label='Obs zero')
-    ax2.axvline(x=syn_zero, color='r', ls='--', label='Syn zero')
-    ax1.legend()
-    ax2.legend()
-    plt.show()
+    if plot_flag:
+        fig = plt.figure(figsize=(10,6))
+        ax1 = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212, sharex = ax1)
+        ax1.plot(obs_lambda, obs_flux, label='Observed')
+        ax1.plot(obs_lambda, synth_data_fe, label='Synthetic')
+        ax2.plot(obs_lambda, dobs_flux, label='Observed', linestyle='--')
+        ax2.plot(obs_lambda[ind_l], dobs_flux[ind_l], marker='o', c='k', ls='None')
+        ax2.plot(obs_lambda, dsyn_flux, label='Synthetic', linestyle='--', marker='o')
+        ax2.plot(obs_lambda[ind_l], dsyn_flux[ind_l], marker='o', c='k', ls='None')
+        ax2.plot(obs_lambda[ind_l], pobs(obs_lambda[ind_l]), label='Observed', linestyle='--', color='k')
+        ax2.plot(obs_lambda[ind_l], psyn(obs_lambda[ind_l]), label='Synthetic', linestyle='--', color='k')
+        ax2.axhline(y=0, color='k', ls='--')
+        ax2.axvline(x=obs_zero, color='b', ls='--', label='Obs zero')
+        ax2.axvline(x=syn_zero, color='r', ls='--', label='Syn zero')
+        ax1.legend()
+        ax2.legend()
+        plt.show()
 
+    eval1 = np.sum((obs_flux[ind_l] - synth_data_fe[ind_l])**2)
+    eval2 = np.sum((dobs_flux[ind_l] - dsyn_flux[ind_l])**2)
+    print('Eval line profile fit:', eval1, eval2)
+    return eval1, eval2
 
 def correct_obs_flux(obs_lambda, obs_flux, synth_lambda, synth_flux):
 
@@ -659,7 +671,7 @@ def main():
 
 
 #    manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,4)
-    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,1)
+    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
     print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
     return
 
