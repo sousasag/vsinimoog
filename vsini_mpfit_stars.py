@@ -14,11 +14,18 @@ sys.path.insert(0, os.path.dirname(repr(__file__).replace("'",""))+'mpfit/')
 from mpfit.mpfit import mpfit
 from matplotlib import pyplot as plt
 
+LOC_FLAG      = "WORK"
+#LOC_FLAG      = "HOME"
 RUN_PATH      = 'running_dir/'
 #MOOG_PATH    = ""  # if you have MOOGSILENT in your path use this.
 #MODELS_PATH  = ""
-MOOG_PATH     = "/home/sousasag/Programas/GIT_projects/SPECPAR3/codes/MOOG2019/./"  # otherwise write your full path to MOOGSILENT here
-MODELS_PATH   = "/home/sousasag/Programas/GIT_projects/SPECPAR3/codes/interpol_models/./"
+if LOC_FLAG == "WORK":
+    MOOG_PATH     = "/home/sousasag/Programas/GIT_projects/SPECPAR3/codes/MOOG2019/./"  # otherwise write your full path to MOOGSILENT here
+    MODELS_PATH   = "/home/sousasag/Programas/GIT_projects/SPECPAR3/codes/interpol_models/./"
+else:
+    MOOG_PATH     = "/home/sousasag/Programs/MOOG2019/./"  # otherwise write your full path to MOOGSILENT here
+    MODELS_PATH   = "/home/sousasag/Programs/interpol_models/./"
+
 LINELIST_PATH = 'linelist/'
 
 def norm(obs_array_complete, snr):
@@ -750,7 +757,7 @@ def main():
     snr  = 300
     ldc  = 0.6    #https://exoctk.stsci.edu/limb_darkening
     instr_broad = 0.055
-    spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded_rv.fits"
+    spectrum = "Data/TOI_5624_HARPS_N_CoAdded.fits"
 
 
     manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)

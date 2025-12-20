@@ -16,12 +16,19 @@ from mpfit.mpfit import mpfit
 from matplotlib import pyplot as plt
 import pickle
 
-
+LOC_FLAG      = "WORK"
+LOC_FLAG      = "HOME"
 RUN_PATH      = 'running_dir/'
 #MOOG_PATH    = ""  # if you have MOOGSILENT in your path use this.
 #MODELS_PATH  = ""
-MOOG_PATH     = "/home/sousasag/Programas/GIT_projects/SPECPAR3/codes/MOOG2019/./"  # otherwise write your full path to MOOGSILENT here
-MODELS_PATH   = "/home/sousasag/Programas/GIT_projects/SPECPAR3/codes/interpol_models/./"
+if LOC_FLAG == "WORK":
+    MOOG_PATH     = "/home/sousasag/Programas/GIT_projects/SPECPAR3/codes/MOOG2019/./"  # otherwise write your full path to MOOGSILENT here
+    MODELS_PATH   = "/home/sousasag/Programas/GIT_projects/SPECPAR3/codes/interpol_models/./"
+else:
+    MOOG_PATH     = "/home/sousasag/Programs/MOOG2019/./"  # otherwise write your full path to MOOGSILENT here
+    MODELS_PATH   = "/home/sousasag/Programs/interpol_models/./"
+
+
 LINELIST_PATH = 'linelist/'
 
 def norm(obs_array_complete, snr):
@@ -715,10 +722,12 @@ def main():
     snr  = 300
     ldc  = 0.6    #https://exoctk.stsci.edu/limb_darkening
     instr_broad = 0.055
-    spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded.fits"
-
-#    test_line_fit(5522.45, 1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
-    test_load()
+    if LOC_FLAG == "WORK":
+        spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded.fits"
+    else:
+        spectrum = "Data/TOI_5624_HARPS_N_CoAdded.fits"
+    test_line_fit(5522.45, 1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+#    test_load()
 
     return
 
