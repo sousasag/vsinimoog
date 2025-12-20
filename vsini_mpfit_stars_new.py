@@ -14,7 +14,7 @@ import sys
 sys.path.insert(0, os.path.dirname(repr(__file__).replace("'",""))+'mpfit/')
 from mpfit.mpfit import mpfit
 from matplotlib import pyplot as plt
-from scipy.differentiate import derivative
+import pickle
 
 
 RUN_PATH      = 'running_dir/'
@@ -533,32 +533,73 @@ def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, f
     plot_line_profile(5633.950, obs_lambda, obs_flux, synth_data_fe, space = 4)
 
 
-def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test):
+def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vi=0, vf=6, vstep=0.2):
     lines = np.loadtxt('linelist/linesfitted.ares', usecols= (0,), unpack=True)
-    vrot_vec = np.arange(0,10,0.25)
-    eval1_vec = []
-    eval2_vec = []
+    vrot_vec = np.arange(vi,vf,vstep)
+    eval1_mat = []
+    eval2_mat = []
     for vrot_test in vrot_vec:
         obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
-        eval1 , eval2 = plot_line_profile(lines[30], obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=False)
-        eval1_vec.append(eval1)
-        eval2_vec.append(eval2)
+        eval1_vec = []
+        eval2_vec = []
+        for l in lines:
+            eval1 , eval2 = plot_line_profile(l, obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=False)
+            print('Eval line profile fit:', vrot_test, eval1, eval2)
+            eval1_vec.append(eval1)
+            eval2_vec.append(eval2)
+        eval1_mat.append(eval1_vec)
+        eval2_mat.append(eval2_vec)
 
-    plt.plot(vrot_vec, eval1_vec, label='Flux')
-    plt.plot(vrot_vec, eval2_vec, label='Derivative')
-    plt.show()
+    eval1_mat = np.array(eval1_mat)
+    eval2_mat = np.array(eval2_mat)
+    a = (eval1_mat, eval2_mat, vrot_vec, lines)
+    with open('fit2.pickle', 'wb') as handle:
+        pickle.dump(a, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    for i in range(len(lines)):
+        print('Line', i, lines[i])
+        eval1_vec = np.array(eval1_mat[:,i])
+        eval2_vec = np.array(eval2_mat[:,i])
+        plt.plot(vrot_vec, eval1_vec, label='Flux')
+        plt.plot(vrot_vec, eval2_vec, label='Derivative')
+        plt.show()
+
+def test_load(line = -1):
+    with open('fit2.pickle', 'rb') as handle:
+        eval1_mat, eval2_mat, vrot_vec, lines = pickle.load(handle)
+    if line == -1:
+        for i in range(len(lines)):
+            print('Line', i, lines[i])
+            eval1_vec = np.array(eval1_mat[:,i])
+            eval2_vec = np.array(eval2_mat[:,i])
+            plt.plot(vrot_vec, eval1_vec/np.max(eval1_vec), label='Flux')
+            plt.plot(vrot_vec, eval2_vec/np.max(eval2_vec), label='Derivative')
+            plt.title('Line at %s A' % lines[i])
+            plt.show()
+    else:
+        i = line
+        print('Line', i, lines[i])
+        eval1_vec = np.array(eval1_mat[:,i])
+        eval2_vec = np.array(eval2_mat[:,i])
+        plt.plot(vrot_vec, eval1_vec/np.max(eval1_vec), label='Flux')
+        plt.plot(vrot_vec, eval2_vec/np.max(eval2_vec), label='Derivative')
+        plt.title('Line at %s A' % lines[i])
+        plt.show()
 
 
 from scipy import interpolate
 from scipy.optimize import root
 def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=True):
+
+    np_rv=10
+    np_fit=20
     ind = np.where( (obs_lambda >= line - space) & (obs_lambda <=  line + space))
 
     obs_lambda = obs_lambda[ind]
     obs_flux = obs_flux[ind]
     synth_data_fe = synth_data_fe[ind]
     ind_c = np.where(obs_lambda >= line)[0][0]
-    ind_l = np.arange(10)+ind_c-5
+    ind_l = np.arange(np_rv)+ind_c-int(np_rv/2)
 
     dobs_flux = np.gradient(obs_flux, obs_lambda)
     dsyn_flux = np.gradient(synth_data_fe, obs_lambda)
@@ -574,7 +615,8 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot
     obs_flux = flux_int(obs_lambda)
 
     ind_c = np.where(obs_lambda >= line)[0][0]
-    ind_l = np.arange(10)+ind_c-5
+    ind_l = np.arange(np_rv)+ind_c-int(np_rv/2)
+    ind_l_fit = np.arange(np_fit)+ind_c-int(np_fit/2)
     dobs_flux = np.gradient(obs_flux, obs_lambda)
     dsyn_flux = np.gradient(synth_data_fe, obs_lambda)
 
@@ -592,9 +634,11 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot
         ax1.plot(obs_lambda, obs_flux, label='Observed')
         ax1.plot(obs_lambda, synth_data_fe, label='Synthetic')
         ax2.plot(obs_lambda, dobs_flux, label='Observed', linestyle='--')
-        ax2.plot(obs_lambda[ind_l], dobs_flux[ind_l], marker='o', c='k', ls='None')
+        ax2.plot(obs_lambda[ind_l_fit], dobs_flux[ind_l_fit], marker='o', c='r', ls='None')
+        ax2.plot(obs_lambda[ind_l], dobs_flux[ind_l], marker='x', c='k', ls='None')
         ax2.plot(obs_lambda, dsyn_flux, label='Synthetic', linestyle='--', marker='o')
-        ax2.plot(obs_lambda[ind_l], dsyn_flux[ind_l], marker='o', c='k', ls='None')
+        ax2.plot(obs_lambda[ind_l_fit], dsyn_flux[ind_l_fit], marker='o', c='r', ls='None')
+        ax2.plot(obs_lambda[ind_l], dsyn_flux[ind_l], marker='x', c='k', ls='None')
         ax2.plot(obs_lambda[ind_l], pobs(obs_lambda[ind_l]), label='Observed', linestyle='--', color='k')
         ax2.plot(obs_lambda[ind_l], psyn(obs_lambda[ind_l]), label='Synthetic', linestyle='--', color='k')
         ax2.axhline(y=0, color='k', ls='--')
@@ -604,15 +648,19 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot
         ax2.legend()
         plt.show()
 
-    eval1 = np.sum((obs_flux[ind_l] - synth_data_fe[ind_l])**2)
-    eval2 = np.sum((dobs_flux[ind_l] - dsyn_flux[ind_l])**2)
-    print('Eval line profile fit:', eval1, eval2)
+    eval1 = np.sum((obs_flux[ind_l_fit] - synth_data_fe[ind_l_fit])**2)
+    eval2 = np.sum((dobs_flux[ind_l_fit] - dsyn_flux[ind_l_fit])**2)
     return eval1, eval2
 
 def correct_obs_flux(obs_lambda, obs_flux, synth_lambda, synth_flux):
 
     pass
 
+
+def test_line_fit(line, vrot_test, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star):
+    obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
+    plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=True)
+    pass
 
 
 ### Main program:
@@ -669,9 +717,13 @@ def main():
     instr_broad = 0.055
     spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded.fits"
 
+#    test_line_fit(5522.45, 1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+    test_load()
+
+    return
 
 #    manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,4)
-    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
+    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
     print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
     return
 
