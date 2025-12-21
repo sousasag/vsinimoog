@@ -540,7 +540,7 @@ def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, f
     plot_line_profile(5633.950, obs_lambda, obs_flux, synth_data_fe, space = 4)
 
 
-def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vi=0, vf=6, vstep=0.2):
+def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vi=0, vf=8, vstep=0.2):
     lines = np.loadtxt('linelist/linesfitted.ares', usecols= (0,), unpack=True)
     vrot_vec = np.arange(vi,vf,vstep)
     eval1_mat = []
@@ -560,7 +560,7 @@ def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad
     eval1_mat = np.array(eval1_mat)
     eval2_mat = np.array(eval2_mat)
     a = (eval1_mat, eval2_mat, vrot_vec, lines)
-    with open('fit2.pickle', 'wb') as handle:
+    with open('fitsun2.pickle', 'wb') as handle:
         pickle.dump(a, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     for i in range(len(lines)):
@@ -592,6 +592,67 @@ def test_load(line = -1):
         plt.plot(vrot_vec, eval2_vec/np.max(eval2_vec), label='Derivative')
         plt.title('Line at %s A' % lines[i])
         plt.show()
+
+def get_ifit(npf, eval_vec, vrot_vec):
+    ifit = np.arange(npf) + np.argmin(eval_vec) - int(npf/2)
+    if ifit[0] < 0:
+        ifit = np.arange(npf)
+    if ifit[-1] >= len(vrot_vec):
+        ifit = np.arange(npf) + len(vrot_vec) - npf            
+    return ifit
+
+
+def test_global(itest = -1, plot_flag=True):
+    with open('fitsun2.pickle', 'rb') as handle:
+        eval1_mat, eval2_mat, vrot_vec, lines = pickle.load(handle)
+    if itest == -1:
+        ivals = range(len(lines))
+    else:
+        ivals = [itest]
+    vrot_lines1 = []
+    vrot_lines2 = []
+    for i in ivals:
+        eval1_vec = np.array(eval1_mat[:,i])
+        eval2_vec = np.array(eval2_mat[:,i])
+        ifit1 = get_ifit(7, eval1_vec, vrot_vec)
+        ifit2 = get_ifit(7, eval2_vec, vrot_vec)
+        p1 = np.polyfit(vrot_vec[ifit1], eval1_vec[ifit1], 2)
+        p2 = np.polyfit(vrot_vec[ifit2], eval2_vec[ifit2], 2)
+        min1 = -p1[1]/(2.*p1[0])
+        min2 = -p2[1]/(2.*p2[0])
+        vrot_lines1.append((min1,np.polyval(p1, min1)))
+        vrot_lines2.append((min2,np.polyval(p2, min2)))
+        if plot_flag and False:
+            fig = plt.figure(figsize=(10,6))
+            ax1 = fig.add_subplot(211)
+            ax2 = fig.add_subplot(212, sharex = ax1)
+            ax1.plot(vrot_vec, eval1_vec, label='Flux')
+            ax1.plot(vrot_vec[ifit1], eval1_vec[ifit1], marker='o', c='r', ls='None')
+            ax1.plot(vrot_vec, np.polyval(p1, vrot_vec), label='Polyfit')
+            ax1.axvline(x=min1, color='k', ls='--')
+            ax2.plot(vrot_vec, eval2_vec, label='Derivative')
+            ax2.plot(vrot_vec[ifit2], eval2_vec[ifit2], marker='o', c='r', ls='None')
+            ax2.plot(vrot_vec, np.polyval(p2, vrot_vec), label='Polyfit')
+            ax2.axvline(x=min2, color='k', ls='--')
+            ax1.set_title('Line at %s A' % lines[i])
+            plt.show()
+    if plot_flag and itest == -1:
+        vrot_lines1 = np.array(vrot_lines1)
+        vrot_lines2 = np.array(vrot_lines2)
+        print('Final results:')
+        print(np.median(vrot_lines1[:,0]), np.std(vrot_lines1[:,0]))
+        print(np.median(vrot_lines2[:,0]), np.std(vrot_lines2[:,0]))
+        fig = plt.figure(figsize=(10,6))
+        ax1 = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212, sharex = ax1)
+        ax1.plot(lines, vrot_lines1[:,0], marker='o')
+        ax1.plot(lines, vrot_lines2[:,0], marker='o')
+        ax1.axhline(y=np.median(vrot_lines1[:,0]), color='b', ls='--')
+        ax1.axhline(y=np.median(vrot_lines2[:,0]), color='orange', ls='--')
+        ax2.plot(lines, vrot_lines1[:,1]/np.median(vrot_lines1[:,1]), marker='o')
+        ax2.plot(lines, vrot_lines2[:,1]/np.median(vrot_lines2[:,1]), marker='o')
+        plt.show()
+
 
 
 from scipy import interpolate
@@ -726,8 +787,23 @@ def main():
         spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI_5624_HARPS_N_CoAdded.fits"
     else:
         spectrum = "Data/TOI_5624_HARPS_N_CoAdded.fits"
-    test_line_fit(5522.45, 1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+
+    star = "Sun_HARPS"
+    teff = 5777
+    eteff = 80
+    logg = 4.44
+    feh  = 0.00
+    efeh = 0.05
+    vtur = 1.00
+    snr  = 250
+    ldc  = 0.65   #https://exoctk.stsci.edu/limb_darkening
+    instr_broad = 0.055
+    spectrum = "/home/sousasag/Data/spectra/sun_harps_ganymede.fits"
+
+
+    test_line_fit(6698.67, 1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
 #    test_load()
+#    test_global(-1)
 
     return
 
