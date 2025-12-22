@@ -17,7 +17,7 @@ from matplotlib import pyplot as plt
 import pickle
 
 LOC_FLAG      = "WORK"
-LOC_FLAG      = "HOME"
+#LOC_FLAG      = "HOME"
 RUN_PATH      = 'running_dir/'
 #MOOG_PATH    = ""  # if you have MOOGSILENT in your path use this.
 #MODELS_PATH  = ""
@@ -332,9 +332,10 @@ def get_spectra(fitsfile, li=6050, lf=6730):
     npoints = img_header['NAXIS1']
     ll = np.arange(0,npoints)*cdelta1+crval1
     rv = get_rv(ll, img_data, li=li, lf=lf)
+#    print("Measured RV: ", rv)
     ll_cor = correct_rv(ll, rv)
-    #plt.plot(ll_cor, img_data)
-    #plt.show()
+#    plt.plot(ll_cor, img_data)
+#    plt.show()
     return ll_cor, img_data, cdelta1
 
 def get_intervals_normalized_spectra(ll, flux, fe_intervals, snr):
@@ -540,7 +541,7 @@ def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, f
     plot_line_profile(5633.950, obs_lambda, obs_flux, synth_data_fe, space = 4)
 
 
-def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vi=0, vf=8, vstep=0.2):
+def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vi=4, vf=10, vstep=0.2):
     lines = np.loadtxt('linelist/linesfitted.ares', usecols= (0,), unpack=True)
     vrot_vec = np.arange(vi,vf,vstep)
     eval1_mat = []
@@ -560,7 +561,7 @@ def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad
     eval1_mat = np.array(eval1_mat)
     eval2_mat = np.array(eval2_mat)
     a = (eval1_mat, eval2_mat, vrot_vec, lines)
-    with open('fitsun2.pickle', 'wb') as handle:
+    with open('fithip41378.pickle', 'wb') as handle:
         pickle.dump(a, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     for i in range(len(lines)):
@@ -642,13 +643,22 @@ def test_global(itest = -1, plot_flag=True):
         print('Final results:')
         print(np.median(vrot_lines1[:,0]), np.std(vrot_lines1[:,0]))
         print(np.median(vrot_lines2[:,0]), np.std(vrot_lines2[:,0]))
+        #weighted mean
+        w1 = 1./vrot_lines1[:,1]**2
+        w2 = 1./vrot_lines2[:,1]**2
+        meanavg = np.average(vrot_lines1[:,0], weights=w1)
+        std = np.sqrt(np.average((vrot_lines1[:,0] - meanavg)**2, weights=w1))
+        meanavg2 = np.average(vrot_lines2[:,0], weights=w2)
+        std2 = np.sqrt(np.average((vrot_lines2[:,0] - meanavg2)**2, weights=w2))
+        print('Weighted mean:', meanavg, meanavg2)
+        print('Weighted std:', std, std2)
         fig = plt.figure(figsize=(10,6))
         ax1 = fig.add_subplot(211)
         ax2 = fig.add_subplot(212, sharex = ax1)
         ax1.plot(lines, vrot_lines1[:,0], marker='o')
         ax1.plot(lines, vrot_lines2[:,0], marker='o')
-        ax1.axhline(y=np.median(vrot_lines1[:,0]), color='b', ls='--')
-        ax1.axhline(y=np.median(vrot_lines2[:,0]), color='orange', ls='--')
+        ax1.axhline(y=meanavg, color='b', ls='--')
+        ax1.axhline(y=meanavg2, color='orange', ls='--')
         ax2.plot(lines, vrot_lines1[:,1]/np.median(vrot_lines1[:,1]), marker='o')
         ax2.plot(lines, vrot_lines2[:,1]/np.median(vrot_lines2[:,1]), marker='o')
         plt.show()
@@ -690,6 +700,10 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot
 
     pobs = interpolate.interp1d(obs_lambda[ind_l], dobs_flux[ind_l])
     psyn = interpolate.interp1d(obs_lambda[ind_l], dsyn_flux[ind_l])
+    #plt.plot(obs_lambda, obs_flux)
+    #plt.plot(obs_lambda, dobs_flux)
+    #plt.plot(obs_lambda[ind_l], dobs_flux[ind_l], marker='o', c='r')
+    #plt.show()
     obs_zero = root(pobs, x0=line).x
     syn_zero = root(psyn, x0=line).x
     rv_corr = (obs_zero - syn_zero)/syn_zero * 299792.458
@@ -747,6 +761,7 @@ def main():
     #
     fe_intervals = pd.read_csv(LINELIST_PATH+'vsini_intervals.list', sep='\t')
 
+
     star = "WASP-34_ESPRESSO"
     teff = 5684
     eteff = 50
@@ -757,8 +772,7 @@ def main():
     snr  = 550
     ldc  = 0.61
     instr_broad = 0.042
-    #spectrum = "/home/sousasag/Programas/Vsini/Vsini2_Vardan/myVsini/spectra/WASP-34_ESPRESSO.fits"
-
+    spectrum = "/home/sousasag/Nextcloud/WORK/spectra/ESPRESSO_reduced/combined_spectra_all_Feb2022/WASP-34_SINGLEHR21_ESPRESSO_2022.fits"
 
     star = "TIC61024636_ESPRESSO"
     teff = 5261
@@ -798,10 +812,27 @@ def main():
     snr  = 250
     ldc  = 0.65   #https://exoctk.stsci.edu/limb_darkening
     instr_broad = 0.055
-    spectrum = "/home/sousasag/Data/spectra/sun_harps_ganymede.fits"
+    if LOC_FLAG == "WORK":
+        spectrum = "/home/sousasag/Programas/GIT_projects/ARES/sun_harps_ganymede.fits"
+    else:
+        spectrum = "/home/sousasag/Data/spectra/sun_harps_ganymede.fits"
 
 
-    test_line_fit(6698.67, 1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+    star = "HIP41378"
+    teff = 6371
+    eteff = 65
+    logg = 4.32
+    feh  = 0.03
+    efeh = 0.05
+    vtur = 1.5
+    snr  = 550
+    ldc  = 0.50
+    instr_broad = 0.055
+    spectrum = "/home/sousasag/Nextcloud/WORK/spectra/ESPRESSO_reduced/combined_spectra_all_Feb2022/WASP-34_SINGLEHR21_ESPRESSO_2022.fits"
+
+
+    test_line_fit(6149.25 , 7, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+#    test_line_fit(6151.62 , 1., teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
 #    test_load()
 #    test_global(-1)
 
