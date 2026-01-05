@@ -1,5 +1,5 @@
 synth 
-model_in       'HIP41378.atm' 
+model_in       'TIC139147770_HARPSS.atm' 
 summary_out    'out1' 
 smoothed_out   'synth_fe.asc' 
 standard_out   'out2' 
@@ -8,11 +8,11 @@ abundances     1    1
         26     0.00 
 plot           1 
 synlimits 
-6705.59  6862.5   0.005  1.0 
+6705.58  6862.5   0.01  1.0 
 plotpars       1 
-6705.59   6862.5  0.80   1.05 
+6705.58   6862.5  0.80   1.05 
 0.0   0.0   0.0   1.0  
-r  0.055  7  0.5  5.54  0.0 
+r  0.055  9.8  0.6  3.54  0.0 
 damping        0 
 atmosphere     1 
 molecules      2 

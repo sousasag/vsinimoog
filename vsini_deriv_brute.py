@@ -115,158 +115,6 @@ def moog_fe(star, p, vmac, lambda_i, lambda_f, ldc, CDELT1, instr_broad):
 
     return 'Finished MOOG synthesis for ' + star + ' in range ' + str(lambda_i) + ' to ' + str(lambda_f) + '.'
 
-def minimize_synth(p, star, vmac, fe_intervals, obs_lambda, obs_flux, ldc, CDELT1, instr_broad, **kwargs):
-    """
-    Function to minimize a model to observational data.
-    :param p: list, initial values of parameters
-    :param star: string, star name
-    :param vmac: float, value of macroturbulence of star
-    :param fe_lines_intervals: intervals where iron lines are present
-    :param fe_intervals_lambda: fe intervals that contain the start and end point of the synthesis
-    :param obs_flux: list of observational flux points
-    :param ldc: float, limb darkening coefficient
-    :param CDELT1: float, delta lambda in the observed spectrum
-    :param kwargs
-    :return: best values of parameters
-    """
-
-
-    def myfunct(p, star=None, vmac=None, fe_intervals=None, obs_lambda=None,
-                obs_flux=None, flux_err=0.01, **kwargs):
-        """
-        User supllied function that contains the model to be tested. Calculates the synthetic points at the same
-        wavelength of the observational points (this means inside the iron lines regions).
-        Returns an integer as status of the calculation and an array of deviates between the data points and the model
-        points, normalized by the error in the observation (here, an arbitrary value is given as HARPS did not provide
-        errors).
-        :param p: list, initial values of parameters
-        :param star: string, star name
-        :param vmac: float, macroturbulence of star
-        :param fe_lines_intervals: intervals where iron lines are present
-        :param obs_flux: list of observational flux points
-        :param flux_err: float, error in observational flux points (set to 0.01 here)
-        :param kwargs
-        :return: integer (status of operations), array of deviates
-        """
-
-        #print round(p[0], 3)
-
-        #lambda_i_values = [round(fe_intervals_lambda[0][0], 3), round(fe_intervals_lambda[0][0], 3) +2.01]
-        #lambda_f_values = [round(fe_intervals_lambda[0][0], 3) + 2.00, round(fe_intervals_lambda[-1][1], 3)]
-
-        gap = obs_lambda[-1] - obs_lambda[0]
-        if gap <= 450:
-            lambda_i_values = [round(obs_lambda[0], 3)]
-            lambda_f_values = [round(obs_lambda[-1], 3)]
-        elif gap > 450 and gap <= 900:
-            lambda_i_values = [round(obs_lambda[0], 3), round(obs_lambda[int(len(obs_lambda)/2)], 3)]
-            lambda_f_values = [round(obs_lambda[int(len(obs_lambda)/2)-1], 3), round(obs_lambda[-1], 3)]
-        elif gap > 900:
-            lambda_i_values = [round(obs_lambda[0], 3), round(obs_lambda[int(len(obs_lambda)/3)], 3), round(obs_lambda[int(len(obs_lambda)/3*2)], 3)]
-            lambda_f_values = [round(obs_lambda[int(len(obs_lambda)/3)-1], 3), round(obs_lambda[int(len(obs_lambda)/3*2)-1], 3), round(obs_lambda[-1], 3)]
-
-        synth_data = []  # all flux values from model
-        synth_lambda = []  # all wavelength points from model
-
-        for lambda_i, lambda_f in zip(lambda_i_values, lambda_f_values):
-            moog_fe(star, p, vmac, lambda_i, lambda_f, ldc, CDELT1, instr_broad)
-            with open(RUN_PATH+'synth_fe.asc') as asc:
-                for x in asc:
-                    if x[0] == ' ':
-                        entry = x.rstrip().split()
-                        synth_lambda.append(float(entry[0]))
-                        synth_data.append(float(entry[1]))
-
-        synth_data_fe = []
-        synth_lambda_fe = []
-
-        fe_intervals_list = [row for row in fe_intervals[['ll_li', 'll_lf','ll_si','ll_sf']].to_numpy()]
-
-        for i,(ll_li, ll_lf, ll_si, ll_sf) in enumerate(fe_intervals_list):
-            select_sll = np.where((synth_lambda >= ll_si) & (synth_lambda <= ll_sf))[0]
-            synth_data_fe.extend(list(np.array(synth_data)[select_sll]))
-            synth_lambda_fe.extend(list(np.array(synth_lambda)[select_sll]))
-
-        obs_flux = np.array(obs_flux)
-        synth_data_fe = np.array(synth_data_fe)
-
-        err = np.zeros(len(obs_flux)) + flux_err
-        status = 0
-
-        return [status, (obs_flux - synth_data_fe)/err]
-
-    def convergence_info(res, parinfo, dof):
-        """
-        Function that returns the best parameter values and errors.
-        :param res: output object resultant from mpfit function
-        :param parinfo: list of dictionaries of parameter information
-        :param dof: float, degrees of freedom
-        :return: best parameter values and errors
-        """
-
-        if res.status == -16:
-            print('status = {0:4}: A parameter or function value has become infinite or an undefined number.'
-                    .format(res.status))
-        elif -15 <= res.status <= -1:
-            print('status = {0:4}: MYFUNCT or iterfunct functions return to terminate the fitting process.'
-                    .format(res.status))
-        elif res.status == 0:
-            print('status = {0:4}: Improper input parameters.'.format(res.status))
-        elif res.status == 1:
-            print('status = {0:4}: Both actual and predicted relative reductions in the sum of squares are at most ftol'
-                    '.'.format(res.status))
-        elif res.status == 2:
-            print('status = {0:4}: Relative error between two consecutive iterates is at most xtol.'.format(res.status))
-        elif res.status == 3:
-            print('status = {0:4}: Conditions for status = 1 and status = 2 both hold.'.format(res.status))
-        elif res.status == 4:
-            print('status = {0:4}: The cosine of the angle between fvec and any column of the jacobian is at most gtol '
-                    'in absolute value.'.format(res.status))
-        elif res.status == 5:
-            print('status = {0:4}: The maximum number of iterations has been reached.'.format(res.status))
-        elif res.status == 6:
-            print('status = {0:4}: ftol is too small'.format(res.status))
-        elif res.status == 7:
-            print('status = {0:4}: xtol is too small.'.format(res.status))
-        elif res.status == 8:
-            print('status = {0:4}: gtol is too small'.format(res.status))
-
-        # res.niter = number of iterations
-        # res.fnorm = summed square residuals
-        chi_reduced = round((res.fnorm/dof), 4)
-        vrot = round(float(res.params[0]), 3)
-        vrot_err = round(float(res.perror[0]), 3)
-        vrot_parameters = [vrot, vrot_err, res.niter, round(float(res.fnorm), 3), chi_reduced, res.status]
-
-        print (star, ('%s: %s +- %s' % (parinfo[0]['parname'], vrot, vrot_err)))
-
-        return vrot_parameters
-
-    # define parameters for minimization
-#    vrot_info = {'parname': 'vrot', 'value': 15, 'fixed': 0, 'limited': [1, 1], 'limits': [1, 20], 'mpside': 2,
-#                    'step': 0.001}
-    vrot_info = {'parname': 'vrot', 'value': 5, 'fixed': 0, 'limited': [1, 1], 'limits': [0.1, 30], 'mpside': 2,
-                    'step': 0.001}
-    parinfo = [vrot_info]
-
-    fa = {'star': star, 'vmac': vmac, 'fe_intervals': fe_intervals, 'obs_lambda':
-            obs_lambda, 'obs_flux': obs_flux}
-    # call for minimization
-
-    m = mpfit(myfunct, parinfo=parinfo, functkw=fa, ftol=1e-5, xtol=1e-5, gtol=1e-5, maxiter=20)
-
-    dof = len(obs_flux) - len(m.params)
-    parameters = convergence_info(m, parinfo, dof)
-
-    return parameters
-
-def creating_final_synth_spectra(vsini, star, spectrum, teff, feh, vtur, logg, snr, fe_intervals, ldc, instr_broad):
-    obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vsini)
-    flux_ratio = (obs_flux / synth_data_fe)
-    flux_diff = (obs_flux - synth_data_fe)
-    synth_normalized_spectra = pd.DataFrame(data=np.column_stack((obs_lambda, synth_data_fe, flux_diff, flux_ratio)),columns=['wl','flux', 'flux_diff', 'flux_ratio'])
-    synth_normalized_spectra.to_csv('running_dir/%s_synth_normalized_spectra.rdb' % star, index = False, sep = '\t')
-
 def fit_lmfit_gauss(x, y):
   """
   This is my simple function to fit a Gaussian to data (x,y)
@@ -400,66 +248,7 @@ def get_vmac(teff, log_g):
     return vmac_funct
 
 
-def get_vsini(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals):
-    create_atm_model(teff, logg, feh, vtur, star)
-    vmac = round(float(get_vmac(teff, logg)), 3)
-#    vmac = 0.00 ### CAREFULL HERE <<<<<<<<<<<<<<<<<<<<<--------------------------------<<<<<<<<<<<<<<<<<<<<<<<<<<<------------
-    # read observational spectra
-    obs_lambda_full_spectrum, obs_data_full_spectrum, delta_lambda =  get_spectra(spectrum)
-    interp_function = interp1d(obs_lambda_full_spectrum, obs_data_full_spectrum)
-    # create wavelength array equal to that of the synthetic models
-    # starts at the first value of the first fe region and ends at the end value of the last region
-    obs_lambda_interp = np.arange(np.min(fe_intervals['ll_li']),np.max(fe_intervals['ll_lf'])+round(float(delta_lambda), 3), round(float(delta_lambda), 3))
-    obs_lambda_interp = np.round(obs_lambda_interp,3)
-    # Why do we need to interpolate??? To get round values for the synthesis calculation
 
-    obs_data_interp = interp_function(obs_lambda_interp)
-    #print 'obs lambda interpolated', obs_lambda_interp
-    #print 'obs data interpolated' , obs_data_interp
-
-    # get wavelength points and flux data for Fe lines in interpolated rounded wavelenghts
-
-    obs_lambda_flat, obs_data_norm_flat = get_intervals_normalized_spectra(obs_lambda_interp, obs_data_interp, fe_intervals, snr)
-
-    obs_normalized_spectra = pd.DataFrame(data=np.column_stack((obs_lambda_flat,obs_data_norm_flat)),columns=['wl','flux'])
-    obs_normalized_spectra.to_csv(RUN_PATH+'/%s_obs_normalized_spectra.rdb' % star, index = False, sep = '\t')
-
-    par_list = [0.5]
-
-    final_vrot  = minimize_synth(p=par_list, star=star, vmac=vmac, fe_intervals=fe_intervals,
-                                obs_lambda=obs_lambda_flat, obs_flux=obs_data_norm_flat, ldc = ldc, CDELT1 = delta_lambda, instr_broad = instr_broad)
-
-    vrot = final_vrot[0]
-    vrot_err = final_vrot[1]
-    status = final_vrot[5]
-
-    #creating_final_synth_spectra(vsini = final_vrot, star = star, vmac = vmac, fe_intervals=fe_intervals, obs_lambda=obs_lambda_flat, obs_flux=obs_data_norm_flat, ldc = ldc, CDELT1 = delta_lambda, instr_broad = instr_broad, flux_err=1)
-
-    print ('results', star, teff, logg, feh, snr, spectrum, final_vrot)
-
-    #stars_par.write('{:10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} \n'.format(star, teff, log_g, feh,
-    #                                                                                    final_vrot[0], final_vrot[1],
-    #                                                                                    round(vmac_funct,3), round(ldc,3), instr_broad, snr))
-
-    return vrot, vrot_err, vmac, status
-
-def get_vsini_error(star, spectrum, teff, eteff, feh, efeh, vtur, logg, snr, ldc, instr_broad, fe_intervals):
-    #parameters = ['teff', 'feh']
-    vrot, vrot_err, vmac, status = get_vsini(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
-    vrot_tm, vrot_err_tm, vmac_tm, status_tm = get_vsini(star, spectrum, teff-eteff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
-    vrot_tp, vrot_err_tp, vmac_tp, status_tp = get_vsini(star, spectrum, teff+eteff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
-    vrot_fm, vrot_err_fm, vmac_fm, status_fm = get_vsini(star, spectrum, teff, feh-efeh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
-    vrot_fp, vrot_err_fp, vmac_fp, status_fp = get_vsini(star, spectrum, teff, feh+efeh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
-
-    vsini_final_err = np.sqrt( np.abs( (vrot_tm - vrot) - (vrot_tp - vrot) )**2. + np.abs( (vrot_fm - vrot) - (vrot_fp - vrot) )**2. + vrot_err**2. )
-
-
-    print(vrot, vrot_err, vmac, status)
-    print(vrot_tm, vrot_err_tm, vmac_tm, status_tm)
-    print(vrot_tp, vrot_err_tp, vmac_tp, status_tp)
-    print(vrot_fm, vrot_err_fm, vmac_fm, status_fm)
-    print(vrot_fp, vrot_err_fp, vmac_fp, status_fp)
-    return vrot, vrot_err, vmac, status, vsini_final_err
 
 
 def create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test):
@@ -467,12 +256,12 @@ def create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr
     obs_lambda_full_spectrum, obs_data_full_spectrum, delta_lambda =  get_spectra(spectrum)
     interp_function = interp1d(obs_lambda_full_spectrum, obs_data_full_spectrum)
     obs_lambda_interp = np.arange(np.min(fe_intervals['ll_li']),np.max(fe_intervals['ll_lf'])+round(float(delta_lambda), 3), round(float(delta_lambda), 3))
-    print(obs_lambda_interp)
+#    print(obs_lambda_interp)
     obs_lambda_interp = np.arange(np.min(fe_intervals['ll_li']),np.max(fe_intervals['ll_lf'])-round(float(delta_lambda), 3), round(float(delta_lambda), 3))
-    print(obs_lambda_interp)
+#    print(obs_lambda_interp)
     obs_lambda_interp = np.round(obs_lambda_interp,3)
-    print(obs_lambda_interp)
-    print(obs_lambda_full_spectrum)
+#    print(obs_lambda_interp)
+#    print(obs_lambda_full_spectrum)
     obs_data_interp = interp_function(obs_lambda_interp)
     obs_lambda_flat, obs_data_norm_flat = get_intervals_normalized_spectra(obs_lambda_interp, obs_data_interp, fe_intervals, snr)
     obs_normalized_spectra = pd.DataFrame(data=np.column_stack((obs_lambda_flat,obs_data_norm_flat)),columns=['wl','flux'])
@@ -481,7 +270,7 @@ def create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr
     create_atm_model(teff, logg, feh, vtur, star)
     vmac = round(float(get_vmac(teff, logg)), 3)
 #    vmac = round(float(0.0), 3)
-    print(teff, logg, feh, vtur, vmac)
+#    print(teff, logg, feh, vtur, vmac)
 
     obs_lambda = np.array(obs_normalized_spectra['wl'])
     CDELT1 = delta_lambda
@@ -533,8 +322,6 @@ def manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe
     plt.plot(obs_lambda, synth_data_fe)
     plt.show()
 
-
-
 def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test):
     obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
 #    plot_line_profile(5522.450, obs_lambda, obs_flux, synth_data_fe, space = 4)
@@ -548,12 +335,12 @@ def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad
     eval1_mat = []
     eval2_mat = []
     for vrot_test in vrot_vec:
+        print('Vrot_testing', vrot_test, vrot_vec[-1])
         obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
         eval1_vec = []
         eval2_vec = []
         for l in lines:
             eval1 , eval2 = plot_line_profile(l, obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=False)
-            print('Eval line profile fit:', vrot_test, eval1, eval2)
             eval1_vec.append(eval1)
             eval2_vec.append(eval2)
         eval1_mat.append(eval1_vec)
@@ -562,7 +349,7 @@ def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad
     eval1_mat = np.array(eval1_mat)
     eval2_mat = np.array(eval2_mat)
     a = (eval1_mat, eval2_mat, vrot_vec, lines)
-    with open('fithip41378.pickle', 'wb') as handle:
+    with open('fit.pickle', 'wb') as handle:
         pickle.dump(a, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 #    for i in range(len(lines)):
@@ -574,7 +361,7 @@ def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad
 #        plt.show()
 
 def test_load(line = -1):
-    with open('fit2.pickle', 'rb') as handle:
+    with open('fit.pickle', 'rb') as handle:
         eval1_mat, eval2_mat, vrot_vec, lines = pickle.load(handle)
     if line == -1:
         for i in range(len(lines)):
@@ -605,7 +392,7 @@ def get_ifit(npf, eval_vec, vrot_vec):
 
 
 def test_global(itest = -1, plot_flag=True):
-    with open('fithip41378.pickle', 'rb') as handle:
+    with open('fit.pickle', 'rb') as handle:
         eval1_mat, eval2_mat, vrot_vec, lines = pickle.load(handle)
     if itest == -1:
         ivals = range(len(lines))
@@ -675,10 +462,7 @@ def smooth(y, box_pts):
     return y_smooth
 
 
-def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=True):
-
-    np_rv=10
-    np_fit=20
+def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, np_rv=10, np_fit=20, plot_flag=True):
     ind = np.where( (obs_lambda >= line - space) & (obs_lambda <=  line + space))
 
     obs_lambda = obs_lambda[ind]
@@ -697,7 +481,7 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot
     obs_zero = root(pobs, x0=line).x
     syn_zero = root(psyn, x0=line).x
     rv_corr = (obs_zero - syn_zero)/syn_zero * 299792.458
-    print(obs_zero, syn_zero, rv_corr)
+#    print(obs_zero, syn_zero, rv_corr)
 
     obs_lambda_c = correct_rv(obs_lambda, rv_corr)
     flux_int = interpolate.interp1d(obs_lambda_c, obs_flux, fill_value='extrapolate', bounds_error=False)
@@ -721,7 +505,7 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot
     obs_zero = root(pobs, x0=line).x
     syn_zero = root(psyn, x0=line).x
     rv_corr = (obs_zero - syn_zero)/syn_zero * 299792.458
-    print(obs_zero, syn_zero, rv_corr)
+ #   print(obs_zero, syn_zero, rv_corr)
 
     if plot_flag:
         fig = plt.figure(figsize=(10,6))
@@ -747,11 +531,6 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot
     eval1 = np.sum((obs_flux[ind_l_fit] - synth_data_fe[ind_l_fit])**2)
     eval2 = np.sum((dobs_flux[ind_l_fit] - dsyn_flux[ind_l_fit])**2)
     return eval1, eval2
-
-def correct_obs_flux(obs_lambda, obs_flux, synth_lambda, synth_flux):
-
-    pass
-
 
 def test_line_fit(line, vrot_test, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star):
     obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
@@ -800,6 +579,18 @@ def main():
     instr_broad = 0.042
     spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC61024636/TIC61024636_waveair_rv.fits"
 
+    star = "HIP41378"
+    teff = 6371
+    eteff = 65
+    logg = 4.32
+    feh  = 0.05
+    efeh = 0.04
+    vtur = 1.5
+    snr  = 550
+    ldc  = 0.68
+    instr_broad = 0.055
+    spectrum = "Data/HIP41378_HARPS_2019.fits"
+
 
     star = "TOI_5624_HARPSN"
     teff = 5327
@@ -832,17 +623,20 @@ def main():
         spectrum = "/home/sousasag/Data/spectra/sun_harps_ganymede.fits"
 
 
-    star = "HIP41378"
-    teff = 6371
-    eteff = 65
-    logg = 4.32
-    feh  = 0.05
-    efeh = 0.04
-    vtur = 1.5
-    snr  = 550
-    ldc  = 0.68
+    star = "TIC139147770_HARPSS"
+    teff = 5904
+    eteff = 63
+    logg = 4.439
+    feh  = 0.005
+    efeh = 0.05
+    vtur = 0.987
+    snr  = 250
+    ldc  = 0.60   #https://exoctk.stsci.edu/limb_darkening
     instr_broad = 0.055
-    spectrum = "Data/HIP41378_HARPS_2019.fits"
+    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC139147770_HARPSS_115000_378_691_2024.fits"
+
+
+
 
 
 #    test_line_fit(6725.360 , 4, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
@@ -859,17 +653,6 @@ def main():
     return
 
 
-    print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
-
-
-#    vrot, vrot_err, vmac, status = get_vsini(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
-#    creating_final_synth_spectra(vrot, star, spectrum, teff, feh, vtur, logg, snr, fe_intervals, ldc, instr_broad)
-#    print ('results', star, teff, logg, feh, snr, spectrum, vrot, vrot_err, vmac, status)
-
-#With Error propagation
-    vrot, vrot_err, vmac, status, vsini_final_err = get_vsini_error(star, spectrum, teff, eteff, feh, efeh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
-    creating_final_synth_spectra(vrot, star, spectrum, teff, feh, vtur, logg, snr, fe_intervals, ldc, instr_broad)
-    print ('results', star, teff, logg, feh, snr, spectrum, vrot, vrot_err, vmac, status, vsini_final_err)
 
 
 if __name__ == "__main__":
