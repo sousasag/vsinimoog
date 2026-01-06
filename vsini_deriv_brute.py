@@ -19,7 +19,7 @@ import pickle
 
 LOC_FLAG      = "WORK"
 #LOC_FLAG      = "HOME"
-RUN_PATH      = 'running_dir/'
+RUN_PATH      = '/home/sousasag/Programas/GIT_projects/vsinimoog/running_dir/'
 #MOOG_PATH    = ""  # if you have MOOGSILENT in your path use this.
 #MODELS_PATH  = ""
 if LOC_FLAG == "WORK":
@@ -30,7 +30,7 @@ else:
     MODELS_PATH   = "/home/sousasag/Programs/interpol_models/./"
 
 
-LINELIST_PATH = 'linelist/'
+LINELIST_PATH = '/home/sousasag/Programas/GIT_projects/vsinimoog/linelist/'
 
 def norm(obs_array_complete, snr):
     """
@@ -137,7 +137,7 @@ def fit_lmfit_gauss(x, y):
 
 
 def get_mask_spectra(li=6050, lf=6730):
-    maskdata = fits.getdata('Data/ESPRESSO_G2.fits')
+    maskdata = fits.getdata(LINELIST_PATH + '../Data/ESPRESSO_G2.fits')
     tw = np.linspace(li, lf, 20000)
     ind = np.where( (maskdata['lambda'] > li) & (maskdata['lambda'] <  lf))
     tf = np.ones(tw.shape)
@@ -330,7 +330,7 @@ def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, f
 
 
 def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vi=0, vf=10, vstep=0.2):
-    lines = np.loadtxt('linelist/linesfitted.ares', usecols= (0,), unpack=True)
+    lines = np.loadtxt(LINELIST_PATH + 'linesfitted.ares', usecols= (0,), unpack=True)
     vrot_vec = np.arange(vi,vf,vstep)
     eval1_mat = []
     eval2_mat = []
@@ -360,8 +360,8 @@ def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad
 #        plt.plot(vrot_vec, eval2_vec, label='Derivative')
 #        plt.show()
 
-def test_load(line = -1):
-    with open('fit.pickle', 'rb') as handle:
+def test_load(line = -1, filein = "fit.pickle"):
+    with open(filein, 'rb') as handle:
         eval1_mat, eval2_mat, vrot_vec, lines = pickle.load(handle)
     if line == -1:
         for i in range(len(lines)):
@@ -382,6 +382,16 @@ def test_load(line = -1):
         plt.title('Line at %s A' % lines[i])
         plt.show()
 
+    eval1_vec = np.array(eval1_mat[:,i])
+    eval2_vec = np.array(eval2_mat[:,i])
+    ifit1 = get_ifit(7, eval1_vec, vrot_vec)
+    ifit2 = get_ifit(7, eval2_vec, vrot_vec)
+    p1 = np.polyfit(vrot_vec[ifit1], eval1_vec[ifit1], 2)
+    p2 = np.polyfit(vrot_vec[ifit2], eval2_vec[ifit2], 2)
+    min1 = -p1[1]/(2.*p1[0])
+    min2 = -p2[1]/(2.*p2[0])
+    return lines[i], min1, min2
+
 def get_ifit(npf, eval_vec, vrot_vec):
     ifit = np.arange(npf) + np.argmin(eval_vec) - int(npf/2)
     if ifit[0] < 0:
@@ -391,8 +401,8 @@ def get_ifit(npf, eval_vec, vrot_vec):
     return ifit
 
 
-def test_global(itest = -1, plot_flag=True):
-    with open('fit.pickle', 'rb') as handle:
+def test_global(itest = -1, filein = "fit.pickle", plot_flag=True):
+    with open(filein, 'rb') as handle:
         eval1_mat, eval2_mat, vrot_vec, lines = pickle.load(handle)
     if itest == -1:
         ivals = range(len(lines))
@@ -462,7 +472,7 @@ def smooth(y, box_pts):
     return y_smooth
 
 
-def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, np_rv=10, np_fit=20, plot_flag=True):
+def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, np_rv=10, np_fit=20, vr = -1, plot_flag=True):
     ind = np.where( (obs_lambda >= line - space) & (obs_lambda <=  line + space))
 
     obs_lambda = obs_lambda[ind]
@@ -524,6 +534,7 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, np_r
         ax2.axhline(y=0, color='k', ls='--')
         ax2.axvline(x=obs_zero, color='b', ls='--', label='Obs zero')
         ax2.axvline(x=syn_zero, color='r', ls='--', label='Syn zero')
+        ax1.set_title('Vrot %s' % vr)
         ax1.legend()
         ax2.legend()
         plt.show()
@@ -534,8 +545,28 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, np_r
 
 def test_line_fit(line, vrot_test, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star):
     obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
-    plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, plot_flag=True)
+    plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, vr= vrot_test, plot_flag=True)
     pass
+
+
+def get_vsini_from_Out(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250):
+    """
+    Docstring for get_vsini_from_Out
+    
+    :param spectrum: Description
+    :param outfile: Description
+    :param instr_broad: Description
+    """
+    if instr_broad == "HARPS":
+        instr_broad = 0.055
+    elif instr_broad == "ESPRESSO":
+        instr_broad = 0.042
+    fe_intervals = pd.read_csv(LINELIST_PATH+'vsini_intervals.list', sep='\t')
+    star = spectrum.split('/')[-1].split('_')[0]
+    teff, eteff, logg, feh, efeh, vtur = np.loadtxt(outfile, usecols= (1,3,4,11,12,9), unpack=True, skiprows=2)
+    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
+    test_global(-1)
+
 
 
 ### Main program:
@@ -636,15 +667,31 @@ def main():
     spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC139147770_HARPSS_115000_378_691_2024.fits"
 
 
-
+    star = "Sun_HARPS"
+    teff = 5777
+    eteff = 80
+    logg = 4.44
+    feh  = 0.00
+    efeh = 0.05
+    vtur = 1.00
+    snr  = 250
+    ldc  = 0.65   #https://exoctk.stsci.edu/limb_darkening
+    instr_broad = 0.055
+    if LOC_FLAG == "WORK":
+        spectrum = "/home/sousasag/Programas/GIT_projects/ARES/sun_harps_ganymede.fits"
+    else:
+        spectrum = "/home/sousasag/Data/spectra/sun_harps_ganymede.fits"
 
 
 #    test_line_fit(6725.360 , 4, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
 #    test_line_fit(6151.62 , 5., teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
-#    test_load()
+    line, vr1, vr2 = test_load(35)
+    test_line_fit(line , vr1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+    test_line_fit(line , vr2, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+
 #    test_global(-1)
 
-#    return
+    return
 
 #    manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,4)
     find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
