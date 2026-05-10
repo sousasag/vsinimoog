@@ -115,6 +115,50 @@ def moog_fe(star, p, vmac, lambda_i, lambda_f, ldc, CDELT1, instr_broad):
 
     return 'Finished MOOG synthesis for ' + star + ' in range ' + str(lambda_i) + ' to ' + str(lambda_f) + '.'
 
+
+
+def moog_fe_ew(star):
+    """
+    This function outputs a parameter file with the given details, outputs a text file and calls MOOGSILENT to read
+    these files. In turn, MOOGSILENT will output an ascii file with EW values expected for lines in the given star properties.
+    The function then select lines to be used in the vsini calculation based on the EW values.
+    :param star: string, star
+    :param p: list of floats, starting values of parameters (in this case, only vrot)
+    :param vmac: float, macroturbulence
+    :param lambda_i: float, starting wavelength of synthesis
+    :param lambda_f: float, ending wavelength of synthesis
+    :param ldc: float, limb darkening coefficient
+    :param CDELT1: float, delta lambda in the observed spectrum
+    :param instr_broad: float, instrumental broadening
+    :return: .par file, .txt file, runs them through MOOGSILENT and returns a message of completion
+    """
+
+    print (star)
+
+    with open(RUN_PATH+'batch.par', 'w') as par:
+        par.write('ewfind \n')
+        par.write('terminal       null \n')
+        par.write('atmosphere     1 \n')
+        par.write('molecules      2 \n')
+        par.write('lines          1 \n')
+        par.write('flux/int       0 \n')
+        par.write('plot           1 \n')
+        par.write('damping        0 \n')
+        par.write('units          0 \n')
+        par.write('standard_out   \'out2ew\' \n')
+        par.write('summary_out    \'outew\' \n')
+        par.write('model_in       \'' + star + '.atm\' \n')
+        par.write('lines_in       \'../linelist/iron_vrot_moog_2.list\' \n')
+
+
+#    os.system('rm '+RUN_PATH+'batch.par')
+    os.system('cd '+RUN_PATH+' && '+MOOG_PATH+'MOOGSILENT')
+    print ('Finished MOOG ewfind for ' + star )
+    return RUN_PATH+'outew'
+
+
+
+
 def fit_lmfit_gauss(x, y):
   """
   This is my simple function to fit a Gaussian to data (x,y)
@@ -329,8 +373,28 @@ def manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, f
     plot_line_profile(5633.950, obs_lambda, obs_flux, synth_data_fe, space = 4)
 
 
-def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vi=0, vf=10, vstep=0.2):
-    lines = np.loadtxt(LINELIST_PATH + 'linesfitted.ares', usecols= (0,), unpack=True)
+def refine_vsini_lines(linesvsin, params, ew_threshold = 10):
+    star, teff, logg, feh, vtur = params
+    create_atm_model(teff, logg, feh, vtur, star)
+    fileew = moog_fe_ew(star)
+    waves, ews = np.loadtxt(fileew, usecols=(0,6), unpack=True, skiprows = 5)
+    linesout = []    
+    for line in linesvsin:
+        ind = np.where(np.abs(waves - line) < 0.1)[0]
+        if len(ind) > 0:
+#            print('Line', line, 'EW', ews[ind[0]])
+            if ews[ind[0]] > ew_threshold:
+                linesout.append(line)
+    print("Number of lines kept:", len(linesout))
+    return np.array(linesout)
+
+
+def find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, linevsin = 'linesfitted.ares', vi=0, vf=10, vstep=0.2):
+    if linevsin == 'linesfitted.ares':
+        linevsin == LINELIST_PATH +  'linesfitted.ares'
+    lines = np.loadtxt(linevsin, usecols= (0,), unpack=True)
+    params = (star, teff, logg, feh, vtur)
+    lines = refine_vsini_lines(lines, params)
     vrot_vec = np.arange(vi,vf,vstep)
     eval1_mat = []
     eval2_mat = []
@@ -435,12 +499,14 @@ def test_global(itest = -1, filein = "fit.pickle", plot_flag=True):
             ax2.axvline(x=min2, color='k', ls='--')
             ax1.set_title('Line at %s A' % lines[i])
             plt.show()
-    if plot_flag and itest == -1:
+    if itest == -1:
         vrot_lines1 = np.array(vrot_lines1)
         vrot_lines2 = np.array(vrot_lines2)
         print('Final results:')
-        print(np.median(vrot_lines1[:,0]), np.std(vrot_lines1[:,0]))
-        print(np.median(vrot_lines2[:,0]), np.std(vrot_lines2[:,0]))
+        mednw1, stdnw1 = np.median(vrot_lines1[:,0]), np.std(vrot_lines1[:,0])
+        mednw2, stdnw2 = np.median(vrot_lines2[:,0]), np.std(vrot_lines2[:,0])
+        print(mednw1, stdnw1)
+        print(mednw2, stdnw2)
         #weighted mean
         w1 = 1./vrot_lines1[:,1]**2
         w2 = 1./vrot_lines2[:,1]**2
@@ -450,17 +516,41 @@ def test_global(itest = -1, filein = "fit.pickle", plot_flag=True):
         std2 = np.sqrt(np.average((vrot_lines2[:,0] - meanavg2)**2, weights=w2))
         print('Weighted mean:', meanavg, meanavg2)
         print('Weighted std:', std, std2)
-        fig = plt.figure(figsize=(10,6))
-        ax1 = fig.add_subplot(211)
-        ax2 = fig.add_subplot(212, sharex = ax1)
-        ax1.plot(lines, vrot_lines1[:,0], marker='o')
-        ax1.plot(lines, vrot_lines2[:,0], marker='o')
-        ax1.axhline(y=meanavg, color='b', ls='--')
-        ax1.axhline(y=meanavg2, color='orange', ls='--')
-        ax2.plot(lines, vrot_lines1[:,1]/np.median(vrot_lines1[:,1]), marker='o')
-        ax2.plot(lines, vrot_lines2[:,1]/np.median(vrot_lines2[:,1]), marker='o')
-        plt.show()
+        vsin_noutlier = (mednw1, stdnw1, mednw2, stdnw2, meanavg, std, meanavg2, std2)
 
+        # Outlier rejection
+        diff1 = np.abs(vrot_lines1[:,0] - meanavg)
+        diff2 = np.abs(vrot_lines2[:,0] - meanavg2)
+        vrot1 = vrot_lines1[diff1 < 2.*std, 0]
+        wrot1 = 1./vrot_lines1[diff1 < 2.*std,1]**2
+        vrot2 = vrot_lines2[diff2 < 2.*std2, 0]
+        wrot2 = 1./vrot_lines2[diff2 < 2.*std2,1]**2
+        lines1 = lines[diff1 < 2.*std]
+        lines2 = lines[diff2 < 2.*std2]
+        meanavg = np.average(vrot1, weights=wrot1)
+        std = np.sqrt(np.average((vrot1 - meanavg)**2, weights=wrot1))
+        meanavg2 = np.average(vrot2, weights=wrot2)
+        std2 = np.sqrt(np.average((vrot2 - meanavg2)**2, weights=wrot2))
+        print('After outlier rejection:')
+        print(np.median(vrot1), np.std(vrot1))
+        print(np.median(vrot2), np.std(vrot2))
+        medw1, stdw1 = np.median(vrot1), np.std(vrot1)
+        medw2, stdw2 = np.median(vrot2), np.std(vrot2)
+        print('Weighted mean:', meanavg, meanavg2)
+        print('Weighted std:', std, std2)
+        vsini_outlier = (medw1, stdw1, medw2, stdw2, meanavg, std, meanavg2, std2)
+        if plot_flag:
+            fig = plt.figure(figsize=(10,6))
+            ax1 = fig.add_subplot(211)
+            ax2 = fig.add_subplot(212, sharex = ax1)
+            ax1.plot(lines1, vrot1, marker='o')
+            ax1.plot(lines2, vrot2, marker='o')
+            ax1.axhline(y=meanavg, color='b', ls='--')
+            ax1.axhline(y=meanavg2, color='orange', ls='--')
+            ax2.plot(lines1, vrot1/np.median(vrot1), marker='o')
+            ax2.plot(lines2, vrot2/np.median(vrot2), marker='o')
+            plt.show()
+    return vsin_noutlier, vsini_outlier
 
 
 from scipy import interpolate
@@ -517,6 +607,9 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, np_r
     rv_corr = (obs_zero - syn_zero)/syn_zero * 299792.458
  #   print(obs_zero, syn_zero, rv_corr)
 
+    eval1 = np.sum((obs_flux[ind_l_fit] - synth_data_fe[ind_l_fit])**2)
+    eval2 = np.sum((dobs_flux[ind_l_fit] - dsyn_flux[ind_l_fit])**2)
+    #print(line, vr, eval1, eval2)
     if plot_flag:
         fig = plt.figure(figsize=(10,6))
         ax1 = fig.add_subplot(211)
@@ -535,21 +628,42 @@ def plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, np_r
         ax2.axvline(x=obs_zero, color='b', ls='--', label='Obs zero')
         ax2.axvline(x=syn_zero, color='r', ls='--', label='Syn zero')
         ax1.set_title('Vrot %s' % vr)
+        # these are matplotlib.patch.Patch properties
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        # place a text box in upper left in axes coords
+        ax2.text(0.05, 0.95, "%6.4f; %6.4f" % (eval1, eval2), transform=ax2.transAxes, fontsize=14,
+        verticalalignment='top', bbox=props)
         ax1.legend()
         ax2.legend()
         plt.show()
 
-    eval1 = np.sum((obs_flux[ind_l_fit] - synth_data_fe[ind_l_fit])**2)
-    eval2 = np.sum((dobs_flux[ind_l_fit] - dsyn_flux[ind_l_fit])**2)
     return eval1, eval2
 
 def test_line_fit(line, vrot_test, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star):
     obs_lambda, obs_flux, synth_data_fe = create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vrot_test)
-    plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, vr= vrot_test, plot_flag=True)
+    synth_normalized_spectra = pd.DataFrame(data=np.column_stack((obs_lambda, synth_data_fe)),columns=['wl','flux'] )
+    obs_normalized_spectra = pd.DataFrame(data=np.column_stack((obs_lambda, obs_flux)),columns=['wl','flux'] )
+    synth_normalized_spectra.to_csv('running_dir/%s_synth_normalized_spectra.rdb' % star, index = False, sep = '\t')
+    obs_normalized_spectra.to_csv('running_dir/%s_obs_normalized_spectra.rdb' % star, index = False, sep = '\t')
+    plt.plot(obs_lambda, obs_flux)
+    plt.plot(obs_lambda, synth_data_fe)
+    plt.show()
+    eval1, eval2 = plot_line_profile(line, obs_lambda, obs_flux, synth_data_fe, space = 4, vr= vrot_test, plot_flag=True)
+    print(line, eval1, eval2)
     pass
 
 
-def get_vsini_from_Out(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250):
+def get_params_out(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250):
+    if instr_broad == "HARPS":
+        instr_broad = 0.055
+    elif instr_broad == "ESPRESSO":
+        instr_broad = 0.042
+    fe_intervals = pd.read_csv(LINELIST_PATH+'vsini_intervals.list', sep='\t')
+    star = spectrum.split('/')[-1].split('_')[0]
+    teff, eteff, logg, feh, efeh, vtur = np.loadtxt(outfile, usecols= (1,3,4,11,12,9), unpack=True, skiprows=2)
+    return star, teff, eteff, logg, feh, efeh, vtur, snr, ldc, instr_broad
+
+def get_vsini_from_Out(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250, linevsin = 'linelist/linesfitted.ares', vi=0, vf=20, vstep=0.5):
     """
     Docstring for get_vsini_from_Out
     
@@ -564,8 +678,10 @@ def get_vsini_from_Out(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr 
     fe_intervals = pd.read_csv(LINELIST_PATH+'vsini_intervals.list', sep='\t')
     star = spectrum.split('/')[-1].split('_')[0]
     teff, eteff, logg, feh, efeh, vtur = np.loadtxt(outfile, usecols= (1,3,4,11,12,9), unpack=True, skiprows=2)
-    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
+    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, linevsin = linevsin, vi=vi, vf=vf, vstep=vstep)
     test_global(-1)
+
+
 
 
 
@@ -610,6 +726,33 @@ def main():
     instr_broad = 0.042
     spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC61024636/TIC61024636_waveair_rv.fits"
 
+    star = "Sun_HARPS"
+    teff = 5777
+    eteff = 80
+    logg = 4.44
+    feh  = 0.00
+    efeh = 0.05
+    vtur = 1.00
+    snr  = 250
+    ldc  = 0.65   #https://exoctk.stsci.edu/limb_darkening
+    instr_broad = 0.055
+    if LOC_FLAG == "WORK":
+        spectrum = "/home/sousasag/Programas/GIT_projects/ARES/sun_harps_ganymede.fits"
+    else:
+        spectrum = "/home/sousasag/Data/spectra/sun_harps_ganymede.fits"
+
+    star = "TIC139147770_HARPSS"
+    teff = 5904
+    eteff = 63
+    logg = 4.439
+    feh  = 0.005
+    efeh = 0.05
+    vtur = 0.987
+    snr  = 250
+    ldc  = 0.60   #https://exoctk.stsci.edu/limb_darkening
+    instr_broad = 0.055
+    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC139147770_HARPSS_115000_378_691_2024.fits"
+
     star = "HIP41378"
     teff = 6371
     eteff = 65
@@ -621,7 +764,6 @@ def main():
     ldc  = 0.68
     instr_broad = 0.055
     spectrum = "Data/HIP41378_HARPS_2019.fits"
-
 
     star = "TOI_5624_HARPSN"
     teff = 5327
@@ -638,65 +780,70 @@ def main():
     else:
         spectrum = "Data/TOI_5624_HARPS_N_CoAdded.fits"
 
-    star = "Sun_HARPS"
-    teff = 5777
-    eteff = 80
-    logg = 4.44
-    feh  = 0.00
-    efeh = 0.05
-    vtur = 1.00
-    snr  = 250
-    ldc  = 0.65   #https://exoctk.stsci.edu/limb_darkening
+    star = "WASP-103"
+    teff = 6013
+    eteff = 44
+    logg = 4.24
+    feh  = 0.08
+    efeh = 0.04
+    vtur = 1.17
+    snr  = 550
+    ldc  = 0.65
+    instr_broad = 0.090  #FIES 65000
+    spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/cheops_spec_abund/WASP-103_FIES_2017.fits" 
+
+
+    star = "TOI_4311_HARPSS1Dcomb"
+    teff = 5063
+    eteff = 66
+    logg = 4.26
+    feh  = -0.065
+    efeh = 0.04
+    vtur = 0.549
+    snr  = 300
+    ldc  = 0.6    #https://exoctk.stsci.edu/limb_darkening
     instr_broad = 0.055
-    if LOC_FLAG == "WORK":
-        spectrum = "/home/sousasag/Programas/GIT_projects/ARES/sun_harps_ganymede.fits"
-    else:
-        spectrum = "/home/sousasag/Data/spectra/sun_harps_ganymede.fits"
+    spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/MRImprove/XGAL/TOI-4311/TOI-4311_S1Dcomb.fits"
 
-
-    star = "TIC139147770_HARPSS"
-    teff = 5904
-    eteff = 63
-    logg = 4.439
-    feh  = 0.005
+    star = "HATS-12_ESPRESSO"
+    teff = 6526
+    eteff = 75
+    logg = 4.158
+    feh  = -0.01
     efeh = 0.05
-    vtur = 0.987
-    snr  = 250
-    ldc  = 0.60   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.055
-    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC139147770_HARPSS_115000_378_691_2024.fits"
+    vtur = 1.66
+    snr  = 300
+    ldc  = 0.45    #https://exoctk.stsci.edu/limb_darkening
+    instr_broad = 0.042
+    spectrum = "/home/sousasag/Data/ATREIDES/HATS-12/ANTARESS_spectra/Disk-integrated/HATS-12_ESPRESSO_Master.fits"
 
-
-    star = "Sun_HARPS"
-    teff = 5777
-    eteff = 80
-    logg = 4.44
-    feh  = 0.00
-    efeh = 0.05
-    vtur = 1.00
-    snr  = 250
-    ldc  = 0.65   #https://exoctk.stsci.edu/limb_darkening
-    instr_broad = 0.055
-    if LOC_FLAG == "WORK":
-        spectrum = "/home/sousasag/Programas/GIT_projects/ARES/sun_harps_ganymede.fits"
-    else:
-        spectrum = "/home/sousasag/Data/spectra/sun_harps_ganymede.fits"
-
+    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC231637303/combined_spec/TIC231637303_HARPSS_2026.fits"
+    outfile = "/home/sousasag/Data/spectra_solene_jupiterHosts/moog_results/Out_moog_lines.TIC231637303_HARPSS_2026.ares_new.er"
+    star, teff, eteff, logg, feh, efeh, vtur, snr, ldc, instr_broad = get_params_out(spectrum, outfile, instr_broad = instr_broad, ldc = ldc, snr = snr)
 
 #    test_line_fit(6725.360 , 4, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
 #    test_line_fit(6151.62 , 5., teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
-    line, vr1, vr2 = test_load(35)
-    test_line_fit(line , vr1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
-    test_line_fit(line , vr2, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
-
+#    line, vr1, vr2 = test_load(2)
+#    test_line_fit(line , vr1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+#    test_line_fit(line , vr2, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
+#    test_line_fit(line , 8, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
 #    test_global(-1)
 
+#    return
+
+    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC231637303/combined_spec/TIC231637303_HARPSS_2026.fits"
+    outfile = "/home/sousasag/Data/spectra_solene_jupiterHosts/moog_results/Out_moog_lines.TIC231637303_HARPSS_2026.ares_new.er"
+    get_vsini_from_Out(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250, vi=5, vf=20, vstep=0.5)
     return
 
+
 #    manual_test2(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,4)
-    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals)
-    print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
+    #find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, linevsin = 'running_dir/HATS-12_vsini.ares', vi=0, vf=15, vstep=0.25)
+    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, linevsin = 'running_dir/HATS-12_vsini.ares', vi=0, vf=15, vstep=0.25)
     test_global(-1)
+#    find_vsini_mine(star, spectrum, teff+eteff, feh+efeh, vtur, logg, snr, ldc, instr_broad, fe_intervals, vi=5, vf=15, vstep=0.25)
+#    print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
+#    test_global(-1)
     return
 
 

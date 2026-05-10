@@ -334,8 +334,8 @@ def get_vmac(teff, log_g):
 
 def get_vsini(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals):
     create_atm_model(teff, logg, feh, vtur, star)
-    vmac = round(float(get_vmac(teff, logg)), 3)
-#    vmac = 0.00 ### CAREFULL HERE <<<<<<<<<<<<<<<<<<<<<--------------------------------<<<<<<<<<<<<<<<<<<<<<<<<<<<------------
+#    vmac = round(float(get_vmac(teff, logg)), 3)
+    vmac = 0.00 ### CAREFULL HERE <<<<<<<<<<<<<<<<<<<<<--------------------------------<<<<<<<<<<<<<<<<<<<<<<<<<<<------------
     # read observational spectra
     obs_lambda_full_spectrum, obs_data_full_spectrum, delta_lambda =  get_spectra(spectrum)
     interp_function = interp1d(obs_lambda_full_spectrum, obs_data_full_spectrum)
@@ -411,8 +411,8 @@ def create_obs_synth_spec(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr
 
 
     create_atm_model(teff, logg, feh, vtur, star)
-    vmac = round(float(get_vmac(teff, logg)), 3)
-#    vmac = round(float(0.0), 3)
+#    vmac = round(float(get_vmac(teff, logg)), 3)
+    vmac = round(float(0.0), 3)
     print(teff, logg, feh, vtur, vmac)
 
     obs_lambda = np.array(obs_normalized_spectra['wl'])
@@ -760,9 +760,21 @@ def main():
     spectrum = "Data/TOI_5624_HARPS_N_CoAdded.fits"
 
 
-    manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
-    print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
-    return
+    star = "HATS-12_ESPRESSO"
+    teff = 6526
+    eteff = 75
+    logg = 4.158
+    feh  = -0.01
+    efeh = 0.05
+    vtur = 1.66
+    snr  = 300
+    ldc  = 0.45    #https://exoctk.stsci.edu/limb_darkening
+    instr_broad = 0.042
+    spectrum = "/home/sousasag/Data/ATREIDES/HATS-12/ANTARESS_spectra/Disk-integrated/HATS-12_ESPRESSO_Master.fits"
+
+    #manual_test(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals,2)
+    #print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
+    #return
 
 
     print (star, teff, logg, feh, vtur, snr, ldc, instr_broad, spectrum)
