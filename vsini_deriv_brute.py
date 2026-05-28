@@ -16,7 +16,7 @@ from mpfit.mpfit import mpfit
 from matplotlib import pyplot as plt
 import pickle
 
-
+PRINT_FLAG = True
 LOC_FLAG      = "WORK"
 #LOC_FLAG      = "HOME"
 RUN_PATH      = '/home/sousasag/Programas/GIT_projects/vsinimoog/running_dir/'
@@ -148,7 +148,7 @@ def moog_fe_ew(star):
         par.write('standard_out   \'out2ew\' \n')
         par.write('summary_out    \'outew\' \n')
         par.write('model_in       \'' + star + '.atm\' \n')
-        par.write('lines_in       \'../linelist/iron_vrot_moog_2.list\' \n')
+        par.write('lines_in       \'../linelist/iron_vrot_moog_ew.list\' \n')
 
 
 #    os.system('rm '+RUN_PATH+'batch.par')
@@ -380,12 +380,16 @@ def refine_vsini_lines(linesvsin, params, ew_threshold = 10):
     waves, ews = np.loadtxt(fileew, usecols=(0,6), unpack=True, skiprows = 5)
     linesout = []    
     for line in linesvsin:
+        print('Checking line', line)
         ind = np.where(np.abs(waves - line) < 0.1)[0]
         if len(ind) > 0:
-#            print('Line', line, 'EW', ews[ind[0]])
+            print('Line', line, 'EW', ews[ind[0]])
             if ews[ind[0]] > ew_threshold:
                 linesout.append(line)
     print("Number of lines kept:", len(linesout))
+    if PRINT_FLAG:
+        input('Press Enter to continue...')
+        PRINT_FLAG = False
     return np.array(linesout)
 
 
@@ -679,10 +683,46 @@ def get_vsini_from_Out(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr 
     star = spectrum.split('/')[-1].split('_')[0]
     teff, eteff, logg, feh, efeh, vtur = np.loadtxt(outfile, usecols= (1,3,4,11,12,9), unpack=True, skiprows=2)
     find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, linevsin = linevsin, vi=vi, vf=vf, vstep=vstep)
-    test_global(-1)
+    vsin_noutlier, vsini_outlier = test_global(-1)
+    medw1, stdw1, medw2, stdw2, meanavg, std, meanavg2, std2 = vsini_outlier
+    return meanavg, std
 
+def get_vsini_from_Out_errors(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250, linevsin = 'linelist/linesfitted.ares', vi=0, vf=20, vstep=0.5):
+    """
+    Docstring for get_vsini_from_Out
+    
+    :param spectrum: Description
+    :param outfile: Description
+    :param instr_broad: Description
+    """
+    if instr_broad == "HARPS":
+        instr_broad = 0.055
+    elif instr_broad == "ESPRESSO":
+        instr_broad = 0.042
+    fe_intervals = pd.read_csv(LINELIST_PATH+'vsini_intervals.list', sep='\t')
+    star = spectrum.split('/')[-1].split('_')[0]
+    teff, eteff, logg, feh, efeh, vtur, logg_gaia = np.loadtxt(outfile, usecols= (1,3,4,11,12,9,18), unpack=True, skiprows=2)
+    find_vsini_mine(star, spectrum, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, linevsin = linevsin, vi=vi, vf=vf, vstep=vstep)
+    vsin_noutlier, vsini_outlier = test_global(-1)
+    medw1, stdw1, medw2, stdw2, meanavg, std, meanavg2, std2 = vsini_outlier
+    vi = np.max([0,meanavg - 3*std])
+    vf = meanavg + 3*std
+    find_vsini_mine(star, spectrum, teff+eteff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, linevsin = linevsin, vi=vi, vf=vf, vstep=vstep)
+    vsin_noutlier, vsini_outlier = test_global(-1)
+    medw1, stdw1, medw2, stdw2, meanavg_teff, std_teff, meanavg2, std2 = vsini_outlier
+    find_vsini_mine(star, spectrum, teff, feh, vtur, logg_gaia, snr, ldc, instr_broad, fe_intervals, linevsin = linevsin, vi=vi, vf=vf, vstep=vstep)
+    vsin_noutlier, vsini_outlier = test_global(-1)
+    medw1, stdw1, medw2, stdw2, meanavg_logg, std_logg, meanavg2, std2 = vsini_outlier
 
-
+    print(meanavg, std)
+    print(meanavg_teff, std_teff)
+    print(meanavg_logg, std_logg)
+    cont_teff = np.abs(meanavg_teff - meanavg)
+    cont_logg = np.abs(meanavg_logg - meanavg)
+    tot_error = np.sqrt(std**2 +cont_teff**2 + cont_logg**2)
+    print("Errors vsini, Teff and logg:", std , cont_teff, cont_logg)
+    print("Quadratic sum of errors:", tot_error)
+    return meanavg, std, tot_error
 
 
 ### Main program:
@@ -817,9 +857,12 @@ def main():
     instr_broad = 0.042
     spectrum = "/home/sousasag/Data/ATREIDES/HATS-12/ANTARESS_spectra/Disk-integrated/HATS-12_ESPRESSO_Master.fits"
 
-    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC231637303/combined_spec/TIC231637303_HARPSS_2026.fits"
-    outfile = "/home/sousasag/Data/spectra_solene_jupiterHosts/moog_results/Out_moog_lines.TIC231637303_HARPSS_2026.ares_new.er"
-    star, teff, eteff, logg, feh, efeh, vtur, snr, ldc, instr_broad = get_params_out(spectrum, outfile, instr_broad = instr_broad, ldc = ldc, snr = snr)
+    #spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC231637303/combined_spec/TIC231637303_HARPSS_2026.fits"
+    #instr_broad = 0.042
+    #snr  = 250
+    #ldc  = 0.6    #https://exoctk.stsci.edu/limb_darkening
+    #outfile = "/home/sousasag/Data/spectra_solene_jupiterHosts/moog_results/Out_moog_lines.TIC231637303_HARPSS_2026.ares_new.er"
+    #star, teff, eteff, logg, feh, efeh, vtur, snr, ldc, instr_broad = get_params_out(spectrum, outfile, instr_broad = instr_broad, ldc = ldc, snr = snr)
 
 #    test_line_fit(6725.360 , 4, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
 #    test_line_fit(6151.62 , 5., teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
@@ -827,13 +870,25 @@ def main():
 #    test_line_fit(line , vr1, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
 #    test_line_fit(line , vr2, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
 #    test_line_fit(line , 8, teff, feh, vtur, logg, snr, ldc, instr_broad, fe_intervals, spectrum, star)    
-#    test_global(-1)
-
+#    vsin_noutlier, vsini_outlier = test_global(-1)
+#    _,_,_,_,vsin,evsini,_,_ = vsini_outlier
+#    print ('Final vsini:', vsin, '+/-', evsini)
 #    return
 
-    spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC231637303/combined_spec/TIC231637303_HARPSS_2026.fits"
-    outfile = "/home/sousasag/Data/spectra_solene_jupiterHosts/moog_results/Out_moog_lines.TIC231637303_HARPSS_2026.ares_new.er"
-    get_vsini_from_Out(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250, vi=5, vf=20, vstep=0.5)
+    #spectrum = "/home/sousasag/Data/spectra_solene_jupiterHosts/TIC231637303/combined_spec/TIC231637303_HARPSS_2026.fits"
+    #outfile = "/home/sousasag/Data/spectra_solene_jupiterHosts/moog_results/Out_moog_lines.TIC231637303_HARPSS_2026.ares_new.erg"
+    #meanavg, std, tot_error = get_vsini_from_Out_errors(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250, vi=5, vf=20, vstep=0.2)
+    
+    #spectrum = "/home/sousasag/Data/ATREIDES/HATS-12/ANTARESS_spectra/Disk-integrated/HATS-12_ESPRESSO_Master.fits"
+    #outfile = "/home/sousasag/Programas/GIT_projects/SPECPAR3/save_folder/Out_moog_lines.HATS-12_ESPRESSO_Master_masked.ares_new.erg"
+    #meanavg, std, tot_error = get_vsini_from_Out_errors(spectrum, outfile, instr_broad = "ESPRESSO", ldc = 0.45, snr = 250, vi=0, vf=20, vstep=0.5)
+
+
+    spectrum = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/TOI-772/combined_spec/TOI772_HARPSS_2026.fits"
+    outfile = "/home/sousasag/Investigador/spectra/CHEOPS_TS3/SPEC/Axis1/moog_results/Out_moog_lines.TOI772_HARPSS_2026.ares_new.erg"
+    meanavg, std, tot_error = get_vsini_from_Out_errors(spectrum, outfile, instr_broad = "HARPS", ldc = 0.6, snr = 250, vi=0, vf=20, vstep=0.5)
+
+    print('Final vsini:', meanavg, '+/-', std, 'Total error:', tot_error)
     return
 
 
